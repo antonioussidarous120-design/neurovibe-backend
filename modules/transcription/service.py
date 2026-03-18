@@ -22,7 +22,7 @@ def _split_script(script: str) -> list:
         sentence = sentence.strip()
         if not sentence:
             continue
-        duration = len(sentence.split()) / settings.WORDS_PER_SECOND
+        duration = len(sentence.split()) / 2.5
         if not buffer_text:
             buffer_start = current_time
         buffer_text = (buffer_text + " " + sentence).strip()
