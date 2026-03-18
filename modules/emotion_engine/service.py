@@ -27,7 +27,7 @@ async def analyze_job(job_id: str, db) -> list:
 async def _score_segment(seg: dict) -> ScoredSegment:
     scores = await _gpt_score(seg["text"])
     score = _compute_score(scores)
-    is_drop = scores.boredom_risk > settings.DROP_MOMENT_THRESHOLD
+    is_drop = scores.boredom_risk > 0.65
     return ScoredSegment(
         segment_id=seg["id"], time_start=seg["time_start"], time_end=seg["time_end"],
         text=seg["text"], scores=scores, segment_score=score, is_drop_moment=is_drop,
