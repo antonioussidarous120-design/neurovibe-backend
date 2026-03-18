@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings
-from typing import List
 
 class Settings(BaseSettings):
     SUPABASE_URL: str
@@ -10,7 +9,7 @@ class Settings(BaseSettings):
     SUPABASE_BUCKET: str = "neurovibe-uploads"
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-4o"
-    ALLOWED_ORIGINS: List[str] = ["*"]
+    ALLOWED_ORIGINS: str = "*"
 
     class Config:
         env_file = ".env"
