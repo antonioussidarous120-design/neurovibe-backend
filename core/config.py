@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-4o"
     ALLOWED_ORIGINS: str = "*"
+    WORDS_PER_SECOND: float = 2.5
+    MAX_SEGMENT_WORDS: int = 50
+    MIN_SEGMENT_WORDS: int = 10
 
     class Config:
         env_file = ".env"
