@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from core.config import settings
 
 app = FastAPI(title="NeuroVibe Studio API")
 
