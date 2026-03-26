@@ -25,7 +25,13 @@ Original: "{original_text}"
 
 JSON only: {{"improved_text": "rewrite here", "emotion_delta": {{"warmth": 0.0, "curiosity": 0.0, "trust": 0.0, "excitement": 0.0, "boredom_risk": 0.0}}, "technique_used": "one sentence"}}"""
     try:
-        r = await client.chat.completions.create(model=settings.OPENAI_MODEL, messages=[{"role":"user","content":prompt}], response_format={"type":"json_object"}, temperature=0.75, max_tokens=400)
+        r = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert marketing AI assistant. Today's date is March 2026. Use the most current marketing strategies and platform trends."},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"}, temperature=0.75, max_tokens=400)
         result = json.loads(r.choices[0].message.content)
         return {"improved_text": result.get("improved_text", original_text), "emotion_delta": result.get("emotion_delta", {}), "technique_used": result.get("technique_used", "")}
     except Exception:

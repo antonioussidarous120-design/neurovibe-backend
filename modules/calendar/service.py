@@ -34,8 +34,11 @@ Return JSON only:
 }}"""
 
     r = await client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
-        messages=[{"role": "user", "content": prompt}],
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are an expert marketing AI assistant. Today's date is March 2026. Use the most current marketing strategies and platform trends."},
+            {"role": "user", "content": prompt},
+        ],
         response_format={"type": "json_object"},
         temperature=0.8,
         max_tokens=4000,
