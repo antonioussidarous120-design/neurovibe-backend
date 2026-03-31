@@ -1,4 +1,5 @@
-import asyncio, uuid, statistics, json
+import asyncio, uuid, statistics, json, os
+from typing import Optional, Tuple
 import httpx
 from openai import AsyncOpenAI
 from core.config import settings
@@ -154,20 +155,22 @@ def _calc_script_vs_delivery_gap(sentiment_results: list, job_segments: list) ->
 
 def _get_google_credentials():
     """
-    Returns google.oauth2 credentials or None (falls back to ADC).
-    Supports both JSON string content (for Railway env vars) and file paths.
+    Reads GOOGLE_APPLICATION_CREDENTIALS from the environment, parses it as a
+    JSON string with json.loads(), and returns a service account Credentials object.
+    Returns None if the variable is unset or not valid JSON (falls back to ADC).
     """
-    creds_val = settings.GOOGLE_APPLICATION_CREDENTIALS.strip()
+    creds_val = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     if not creds_val:
         return None
-    if creds_val.startswith("{"):
-        from google.oauth2 import service_account
+    try:
         info = json.loads(creds_val)
+        from google.oauth2 import service_account
         return service_account.Credentials.from_service_account_info(
             info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
         )
-    # File path — Google client library picks it up via the env var automatically
-    return None
+    except json.JSONDecodeError:
+        # Value is a file path, not JSON — let the Google client library use it via ADC
+        return None
 
 
 def _google_is_configured() -> bool:
@@ -176,7 +179,7 @@ def _google_is_configured() -> bool:
 
 # ── Google Cloud Storage helpers ───────────────────────────────────────────────
 
-async def _gcs_upload(file_bytes: bytes, filename: str, credentials) -> tuple[str, str]:
+async def _gcs_upload(file_bytes: bytes, filename: str, credentials) -> Tuple[str, str]:
     """Upload bytes to GCS, returns (gs_uri, blob_name)."""
     def _sync():
         from google.cloud import storage as gcs
@@ -401,7 +404,7 @@ def _empty_visual_result() -> dict:
 
 # ── Main analysis function ─────────────────────────────────────────────────────
 
-async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id: str | None, db) -> dict:
+async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id: Optional[str], db) -> dict:
     if not settings.ASSEMBLYAI_API_KEY or settings.ASSEMBLYAI_API_KEY == "YOUR_ASSEMBLYAI_API_KEY_HERE":
         raise ValueError("ASSEMBLYAI_API_KEY is not configured. Add it to your .env and Railway variables.")
 
