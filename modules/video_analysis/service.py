@@ -481,12 +481,13 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
             "visual_hook_score": _calc_visual_hook_score(ar, shot_changes),
             "has_movement": _calc_has_movement(ar, shot_changes),
         }
-        visual_feedback = await _generate_visual_feedback(audio_scores, visual_scores)
-        visual_scores["visual_feedback"] = visual_feedback
     else:
         visual_scores = _empty_visual_result()
 
-    # ── Step 5: Save to Supabase ───────────────────────────────────────────────
+    # ── Step 5: Always generate GPT-4o feedback (audio + visual combined) ─────
+    ai_feedback = await _generate_visual_feedback(audio_scores, visual_scores)
+
+    # ── Step 6: Save to Supabase ───────────────────────────────────────────────
     analysis_id = str(uuid.uuid4())
     db.table("video_analyses").insert({
         "id": analysis_id,
@@ -509,17 +510,17 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
             "audio_duration": audio_duration_sec,
             "confidence": aai_data.get("confidence"),
         },
-        # Visual columns
         "shot_changes": visual_scores["shot_changes"],
         "cut_frequency_score": visual_scores["cut_frequency_score"],
         "face_visibility_score": visual_scores["face_visibility_score"],
         "text_overlay_score": visual_scores["text_overlay_score"],
         "visual_hook_score": visual_scores["visual_hook_score"],
         "has_movement": visual_scores["has_movement"],
-        "visual_feedback": visual_scores["visual_feedback"],
+        "visual_feedback": ai_feedback,
+        "ai_feedback": ai_feedback,
     }).execute()
 
-    # ── Step 6: Return ─────────────────────────────────────────────────────────
+    # ── Step 7: Return ─────────────────────────────────────────────────────────
     return {
         "analysis_id": analysis_id,
         "job_id": job_id,
@@ -538,7 +539,7 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
             "visual_hook_score": visual_scores["visual_hook_score"],
             "has_movement": visual_scores["has_movement"],
         },
-        "visual_feedback": visual_scores["visual_feedback"],
+        "ai_feedback": ai_feedback,
         "sentiment_breakdown": breakdown,
         "flat_tone_moments": flat_tone_moments,
         "shot_changes": visual_scores["shot_changes"],
