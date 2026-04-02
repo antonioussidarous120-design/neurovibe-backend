@@ -49,7 +49,7 @@ JSON only: {{"curiosity":0.0,"warmth":0.0,"trust":0.0,"excitement":0.0,"boredom_
         r = await client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an expert marketing AI assistant. Today's date is March 2026. Use the most current marketing strategies and platform trends."},
+                {"role": "system", "content": "You are a straight-talking content coach — like a friend who works in marketing and gives real honest feedback. Never use corporate language, AI buzzwords, or formal tone. Write like you're texting a friend who asked for advice. Be specific, direct, and real. Say things like 'your hook is weak here because...' not 'the engagement metrics indicate suboptimal performance'. Use casual language, be encouraging but honest. Short sentences. Get to the point fast."},
                 {"role": "user", "content": prompt},
             ],
             response_format={"type":"json_object"},
