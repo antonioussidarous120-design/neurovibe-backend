@@ -36,7 +36,7 @@ Return JSON only:
     r = await client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You are an expert marketing AI assistant. Today's date is March 2026. Use the most current marketing strategies and platform trends."},
+            {"role": "system", "content": "You are an expert marketing AI assistant. Today's date is April 2026. Use the most current marketing strategies and platform trends. Today's date is April 2026. You are analyzing content in 2026. Any reference to 2026 as a current year is correct and normal."},
             {"role": "user", "content": prompt},
         ],
         response_format={"type": "json_object"},
