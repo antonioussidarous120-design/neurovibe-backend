@@ -1,22 +1,12 @@
 from fastapi import APIRouter, BackgroundTasks, UploadFile, File, Form, HTTPException
 from typing import Optional
 from core.database import get_supabase
-from core.config import settings
 from modules.video_analysis.service import analyze_video, SUPPORTED_FORMATS
 import uuid
 import logging
 import time
 
 logger = logging.getLogger(__name__)
-
-CONTENT_TYPES = {
-    "mp4": "video/mp4",
-    "mov": "video/quicktime",
-    "webm": "video/webm",
-    "mp3": "audio/mpeg",
-    "m4a": "audio/mp4",
-    "wav": "audio/wav",
-}
 
 router = APIRouter()
 
@@ -69,20 +59,12 @@ async def video_analyze(
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
     db = get_supabase()
-    test_user = "00000000-0000-0000-0000-000000000001"
-    file_id = str(uuid.uuid4())
-    file_path = f"{test_user}/video_analysis/{file_id}/{file.filename}"
 
-    content_type = CONTENT_TYPES.get(ext, "application/octet-stream")
-    try:
-        db.storage.from_(settings.SUPABASE_BUCKET).upload(
-            file_path, file_bytes, file_options={"content-type": content_type}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Supabase storage upload failed: {e}")
-
-    # Create a tracking row immediately
+    # Create a tracking row immediately so the client can poll
     video_job_id = str(uuid.uuid4())
+    # file_path is a logical reference stored in video_analyses — no actual upload
+    file_path = f"assemblyai/{video_job_id}/{file.filename}"
+
     db.table("video_analysis_jobs").insert({
         "id": video_job_id,
         "status": "processing",
