@@ -38,7 +38,9 @@ async def video_analyze(
         result = await analyze_video(file_bytes, file.filename, file_path, job_id, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Video analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error during video analysis: {e}")
 
     return result

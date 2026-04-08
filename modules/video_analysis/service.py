@@ -180,6 +180,50 @@ def _google_is_configured() -> bool:
     return bool(settings.GOOGLE_CLOUD_PROJECT and settings.GOOGLE_CLOUD_BUCKET)
 
 
+def _google_config_warning() -> Optional[str]:
+    """
+    Returns a human-readable warning string if any Google config is incomplete,
+    otherwise None (meaning all three required values are present).
+    """
+    if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip():
+        return (
+            "GOOGLE_APPLICATION_CREDENTIALS is not set. "
+            "Paste your Google service account JSON string into that Railway env var to enable visual analysis."
+        )
+    if not settings.GOOGLE_CLOUD_PROJECT:
+        return (
+            "GOOGLE_CLOUD_PROJECT is not set. "
+            "Add your GCP project ID to Railway env vars to enable visual analysis."
+        )
+    if not settings.GOOGLE_CLOUD_BUCKET:
+        return (
+            "GOOGLE_CLOUD_BUCKET is not set. "
+            "Add a GCS bucket name to Railway env vars to enable visual analysis."
+        )
+    return None
+
+
+def _describe_google_error(e: Exception) -> str:
+    """Translate a Google API exception into a clear, actionable message."""
+    msg = str(e).lower()
+    if any(w in msg for w in ("credentials", "authentication", "unauthenticated", "401")):
+        return (
+            "Google authentication failed. Your GOOGLE_APPLICATION_CREDENTIALS JSON is invalid "
+            "or the service account lacks Video Intelligence / Storage permissions."
+        )
+    if any(w in msg for w in ("permission", "forbidden", "403")):
+        return (
+            "Google permission denied. Make sure the service account has roles: "
+            "roles/videointelligence.user and roles/storage.objectAdmin."
+        )
+    if any(w in msg for w in ("not found", "404", "bucket", "nosuchbucket")):
+        return (
+            f"Google Cloud bucket '{settings.GOOGLE_CLOUD_BUCKET}' not found or inaccessible. "
+            "Check GOOGLE_CLOUD_BUCKET and GOOGLE_CLOUD_PROJECT are correct."
+        )
+    return f"Google Video Intelligence error: {e}"
+
+
 # ── Google Cloud Storage helpers ───────────────────────────────────────────────
 
 async def _gcs_upload(file_bytes: bytes, filename: str, credentials) -> Tuple[str, str]:
@@ -408,43 +452,110 @@ def _empty_visual_result() -> dict:
 # ── Main analysis function ─────────────────────────────────────────────────────
 
 async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id: Optional[str], db) -> dict:
-    if not settings.ASSEMBLYAI_API_KEY or settings.ASSEMBLYAI_API_KEY == "YOUR_ASSEMBLYAI_API_KEY_HERE":
-        raise ValueError("ASSEMBLYAI_API_KEY is not configured. Add it to your .env and Railway variables.")
+    # ── Config checks ──────────────────────────────────────────────────────────
+    aai_key = settings.ASSEMBLYAI_API_KEY.strip()
+    if not aai_key or aai_key == "YOUR_ASSEMBLYAI_API_KEY_HERE":
+        raise ValueError(
+            "AssemblyAI API key is missing. "
+            "Set ASSEMBLYAI_API_KEY in your Railway environment variables. "
+            "Sign up at assemblyai.com to get your free API key."
+        )
 
     ext = filename.rsplit(".", 1)[-1].lower()
-    is_visual = ext in VISUAL_FORMATS and _google_is_configured()
+    warnings: list = []
 
-    # ── Step 1: Upload to AssemblyAI (and GCS if visual) in parallel ──────────
+    # Decide whether to attempt visual analysis
+    google_warn = _google_config_warning()
+    if ext not in VISUAL_FORMATS:
+        is_visual = False
+        if ext in SUPPORTED_FORMATS:
+            warnings.append("Audio-only file detected — visual analysis skipped.")
+    elif google_warn:
+        is_visual = False
+        warnings.append(google_warn)
+    else:
+        is_visual = True
+
+    credentials = _get_google_credentials() if is_visual else None
+
+    # ── Step 1: AssemblyAI upload (always) + GCS upload (if visual) in parallel
+    aai_upload_url = None
+    gcs_uri = blob_name = None
     if is_visual:
-        credentials = _get_google_credentials()
-        aai_upload_url, (gcs_uri, blob_name) = await asyncio.gather(
+        upload_results = await asyncio.gather(
             _upload_bytes(file_bytes),
             _gcs_upload(file_bytes, filename, credentials),
+            return_exceptions=True,
         )
+        aai_result, gcs_result = upload_results
+
+        if isinstance(aai_result, Exception):
+            raise RuntimeError(
+                f"AssemblyAI upload failed: {aai_result}. "
+                "Check your ASSEMBLYAI_API_KEY and that assemblyai.com is reachable."
+            )
+        aai_upload_url = aai_result
+
+        if isinstance(gcs_result, Exception):
+            is_visual = False
+            warnings.append(
+                f"Google Cloud Storage upload failed — falling back to audio-only analysis. "
+                f"Reason: {_describe_google_error(gcs_result)}"
+            )
+        else:
+            gcs_uri, blob_name = gcs_result
     else:
-        aai_upload_url = await _upload_bytes(file_bytes)
-        gcs_uri = blob_name = credentials = None
+        try:
+            aai_upload_url = await _upload_bytes(file_bytes)
+        except Exception as e:
+            raise RuntimeError(
+                f"AssemblyAI upload failed: {e}. "
+                "Check your ASSEMBLYAI_API_KEY and that assemblyai.com is reachable."
+            )
 
     # ── Step 2: Submit AssemblyAI transcript + kick off Google VIA in parallel ─
-    # Google VIA (submit + poll) runs in a thread; AssemblyAI transcript is
-    # submitted here and polled in step 3 — both run truly concurrently.
-    blob_name_ref = [blob_name]  # mutable ref for finally cleanup
+    vi_result = None
+    try:
+        transcript_id = await _submit_transcript(aai_upload_url)
+    except Exception as e:
+        raise RuntimeError(
+            f"AssemblyAI transcription job submission failed: {e}. "
+            "Your API key may be invalid or your AssemblyAI account may have insufficient credits."
+        )
+
     try:
         if is_visual:
             google_task = asyncio.create_task(_run_video_intelligence(gcs_uri, credentials))
-            transcript_id = await _submit_transcript(aai_upload_url)
-            # Poll AssemblyAI while Google VIA runs in its thread
-            aai_data, vi_result = await asyncio.gather(
+            gather_results = await asyncio.gather(
                 _poll_transcript(transcript_id),
                 google_task,
+                return_exceptions=True,
             )
+            aai_data, vi_raw = gather_results
+
+            if isinstance(aai_data, Exception):
+                raise aai_data  # AssemblyAI failure is fatal — re-raise
+
+            if isinstance(vi_raw, Exception):
+                vi_result = None
+                warnings.append(
+                    f"Visual analysis failed — returning audio results only. "
+                    f"Reason: {_describe_google_error(vi_raw)}"
+                )
+            else:
+                vi_result = vi_raw
         else:
-            transcript_id = await _submit_transcript(aai_upload_url)
             aai_data = await _poll_transcript(transcript_id)
-            vi_result = None
+    except Exception as e:
+        if "AssemblyAI" in str(e) or isinstance(e, (ValueError, TimeoutError)):
+            raise
+        # Unexpected error from the gather — treat as Google failure, keep audio
+        vi_result = None
+        warnings.append(f"Visual analysis failed unexpectedly — returning audio results only. Reason: {e}")
+        aai_data = await _poll_transcript(transcript_id)
     finally:
-        if blob_name_ref[0]:
-            await _gcs_delete(blob_name_ref[0], credentials)
+        if blob_name:
+            await _gcs_delete(blob_name, credentials)
 
     # ── Step 3: Calculate audio scores ────────────────────────────────────────
     sentiment_results = aai_data.get("sentiment_analysis_results") or []
@@ -490,7 +601,7 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
     # ── Step 5: Always generate GPT-4o feedback (audio + visual combined) ─────
     ai_feedback = await _generate_visual_feedback(audio_scores, visual_scores)
 
-    # ── Step 6: Save to Supabase ───────────────────────────────────────────────
+    # ── Step 6: Save to Supabase ──────────────────────────────────────────────
     analysis_id = str(uuid.uuid4())
     db.table("video_analyses").insert({
         "id": analysis_id,
@@ -550,4 +661,5 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
         "iab_categories": iab_categories,
         "content_safety": content_safety,
         "assemblyai_transcript_id": transcript_id,
+        "warnings": warnings,
     }
