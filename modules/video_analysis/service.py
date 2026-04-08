@@ -25,7 +25,13 @@ SYSTEM_PROMPT = (
 
 async def _upload_bytes(file_bytes: bytes) -> str:
     """Upload raw bytes to AssemblyAI CDN, returns upload_url."""
-    headers = {"authorization": settings.ASSEMBLYAI_API_KEY.strip()}
+    api_key = settings.ASSEMBLYAI_API_KEY.strip().encode("ascii").decode("ascii")
+    logger.info(
+        f"AssemblyAI key length: {len(settings.ASSEMBLYAI_API_KEY)}, "
+        f"stripped length: {len(settings.ASSEMBLYAI_API_KEY.strip())}, "
+        f"last char repr: {repr(settings.ASSEMBLYAI_API_KEY[-1])}"
+    )
+    headers = {"authorization": api_key}
     async with httpx.AsyncClient(timeout=180) as client:
         r = await client.post(f"{ASSEMBLYAI_BASE}/upload", headers=headers, content=file_bytes)
         r.raise_for_status()

@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 
 class Settings(BaseSettings):
     SUPABASE_URL: str
@@ -17,6 +18,11 @@ class Settings(BaseSettings):
     WORDS_PER_SECOND: float = 2.5
     MAX_SEGMENT_WORDS: int = 50
     MIN_SEGMENT_WORDS: int = 10
+
+    @field_validator("ASSEMBLYAI_API_KEY", mode="before")
+    @classmethod
+    def strip_assemblyai_key(cls, v: str) -> str:
+        return v.strip() if isinstance(v, str) else v
 
     class Config:
         env_file = ".env"
