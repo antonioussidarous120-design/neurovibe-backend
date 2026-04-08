@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, BackgroundTasks, UploadFile, File, Form, HTTPException
 from typing import Optional
 from core.database import get_supabase
 from core.config import settings
@@ -21,8 +21,39 @@ CONTENT_TYPES = {
 router = APIRouter()
 
 
+async def _run_analysis(
+    video_job_id: str,
+    file_bytes: bytes,
+    filename: str,
+    file_path: str,
+    job_id: Optional[str],
+):
+    """Background task: run analysis and update video_analysis_jobs with result or error."""
+    db = get_supabase()
+    start_time = time.time()
+    logger.info(f"[video_analyze] BG START video_job_id={video_job_id} file={filename}")
+    try:
+        result = await analyze_video(file_bytes, filename, file_path, job_id, db)
+        elapsed = round(time.time() - start_time, 1)
+        logger.info(f"[video_analyze] BG COMPLETE video_job_id={video_job_id} elapsed={elapsed}s")
+        db.table("video_analysis_jobs").update({
+            "status": "complete",
+            "result": result,
+            "updated_at": "now()",
+        }).eq("id", video_job_id).execute()
+    except Exception as e:
+        elapsed = round(time.time() - start_time, 1)
+        logger.error(f"[video_analyze] BG ERROR video_job_id={video_job_id} elapsed={elapsed}s error={e}")
+        db.table("video_analysis_jobs").update({
+            "status": "error",
+            "error_message": str(e),
+            "updated_at": "now()",
+        }).eq("id", video_job_id).execute()
+
+
 @router.post("/analyze")
 async def video_analyze(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     job_id: Optional[str] = Form(None),
 ):
@@ -37,9 +68,6 @@ async def video_analyze(
     if len(file_bytes) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-    logger.info(f"[video_analyze] START file={file.filename} size={len(file_bytes)} job_id={job_id}")
-    start_time = time.time()
-
     db = get_supabase()
     test_user = "00000000-0000-0000-0000-000000000001"
     file_id = str(uuid.uuid4())
@@ -53,18 +81,39 @@ async def video_analyze(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Supabase storage upload failed: {e}")
 
-    try:
-        result = await analyze_video(file_bytes, file.filename, file_path, job_id, db)
-    except ValueError as e:
-        logger.error(f"[video_analyze] VALIDATION ERROR file={file.filename} error={e}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        logger.error(f"[video_analyze] RUNTIME ERROR file={file.filename} error={e}")
-        raise HTTPException(status_code=502, detail=str(e))
-    except Exception as e:
-        logger.error(f"[video_analyze] UNEXPECTED ERROR file={file.filename} error={e}")
-        raise HTTPException(status_code=500, detail=f"Unexpected error during video analysis: {e}")
+    # Create a tracking row immediately
+    video_job_id = str(uuid.uuid4())
+    db.table("video_analysis_jobs").insert({
+        "id": video_job_id,
+        "status": "processing",
+        "filename": file.filename,
+    }).execute()
 
-    elapsed = round(time.time() - start_time, 1)
-    logger.info(f"[video_analyze] COMPLETE file={file.filename} elapsed={elapsed}s analysis_id={result.get('analysis_id')}")
-    return result
+    logger.info(f"[video_analyze] QUEUED video_job_id={video_job_id} file={file.filename} size={len(file_bytes)}")
+
+    background_tasks.add_task(
+        _run_analysis, video_job_id, file_bytes, file.filename, file_path, job_id
+    )
+
+    return {"job_id": video_job_id, "status": "processing"}
+
+
+@router.get("/status/{video_job_id}")
+async def video_status(video_job_id: str):
+    db = get_supabase()
+    res = db.table("video_analysis_jobs").select("status,result,error_message").eq("id", video_job_id).execute()
+
+    if not res.data:
+        raise HTTPException(status_code=404, detail=f"No analysis job found for id '{video_job_id}'")
+
+    row = res.data[0]
+    status = row["status"]
+
+    if status == "processing":
+        return {"status": "processing"}
+
+    if status == "error":
+        return {"status": "error", "message": row.get("error_message", "Unknown error")}
+
+    # complete
+    return {"status": "complete", "results": row.get("result", {})}
