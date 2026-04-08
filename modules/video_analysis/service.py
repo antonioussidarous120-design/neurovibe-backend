@@ -1,8 +1,10 @@
-import asyncio, uuid, statistics, json, os
+import asyncio, uuid, statistics, json, os, logging
 from typing import Optional, Tuple
 import httpx
 from openai import AsyncOpenAI
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 ASSEMBLYAI_BASE = "https://api.assemblyai.com/v2"
 SUPPORTED_FORMATS = {"mp4", "mov", "webm", "m4a", "mp3", "wav"}
@@ -478,6 +480,8 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
 
     credentials = _get_google_credentials() if is_visual else None
 
+    logger.info(f"[analyze_video] Starting analysis: file={filename} ext={ext} visual={is_visual} job_id={job_id}")
+
     # ── Step 1: AssemblyAI upload (always) + GCS upload (if visual) in parallel
     aai_upload_url = None
     gcs_uri = blob_name = None
@@ -512,6 +516,8 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
                 f"AssemblyAI upload failed: {e}. "
                 "Check your ASSEMBLYAI_API_KEY and that assemblyai.com is reachable."
             )
+
+    logger.info(f"[analyze_video] Upload(s) complete — submitting AssemblyAI transcript")
 
     # ── Step 2: Submit AssemblyAI transcript + kick off Google VIA in parallel ─
     vi_result = None
@@ -556,6 +562,8 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
     finally:
         if blob_name:
             await _gcs_delete(blob_name, credentials)
+
+    logger.info(f"[analyze_video] AssemblyAI + visual analysis complete — calculating scores")
 
     # ── Step 3: Calculate audio scores ────────────────────────────────────────
     sentiment_results = aai_data.get("sentiment_analysis_results") or []
@@ -633,6 +641,8 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
         "visual_feedback": ai_feedback,
         "ai_feedback": ai_feedback,
     }).execute()
+
+    logger.info(f"[analyze_video] Analysis complete — analysis_id={analysis_id} warnings={len(warnings)}")
 
     # ── Step 7: Return ─────────────────────────────────────────────────────────
     return {

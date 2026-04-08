@@ -4,6 +4,10 @@ from core.database import get_supabase
 from core.config import settings
 from modules.video_analysis.service import analyze_video, SUPPORTED_FORMATS
 import uuid
+import logging
+import time
+
+logger = logging.getLogger(__name__)
 
 CONTENT_TYPES = {
     "mp4": "video/mp4",
@@ -33,6 +37,9 @@ async def video_analyze(
     if len(file_bytes) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
+    logger.info(f"[video_analyze] START file={file.filename} size={len(file_bytes)} job_id={job_id}")
+    start_time = time.time()
+
     db = get_supabase()
     test_user = "00000000-0000-0000-0000-000000000001"
     file_id = str(uuid.uuid4())
@@ -49,10 +56,15 @@ async def video_analyze(
     try:
         result = await analyze_video(file_bytes, file.filename, file_path, job_id, db)
     except ValueError as e:
+        logger.error(f"[video_analyze] VALIDATION ERROR file={file.filename} error={e}")
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
+        logger.error(f"[video_analyze] RUNTIME ERROR file={file.filename} error={e}")
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
+        logger.error(f"[video_analyze] UNEXPECTED ERROR file={file.filename} error={e}")
         raise HTTPException(status_code=500, detail=f"Unexpected error during video analysis: {e}")
 
+    elapsed = round(time.time() - start_time, 1)
+    logger.info(f"[video_analyze] COMPLETE file={file.filename} elapsed={elapsed}s analysis_id={result.get('analysis_id')}")
     return result
