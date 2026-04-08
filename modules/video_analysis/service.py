@@ -25,7 +25,7 @@ SYSTEM_PROMPT = (
 
 async def _upload_bytes(file_bytes: bytes) -> str:
     """Upload raw bytes to AssemblyAI CDN, returns upload_url."""
-    headers = {"authorization": settings.ASSEMBLYAI_API_KEY}
+    headers = {"authorization": settings.ASSEMBLYAI_API_KEY.strip()}
     async with httpx.AsyncClient(timeout=180) as client:
         r = await client.post(f"{ASSEMBLYAI_BASE}/upload", headers=headers, content=file_bytes)
         r.raise_for_status()
@@ -35,7 +35,7 @@ async def _upload_bytes(file_bytes: bytes) -> str:
 async def _submit_transcript(upload_url: str) -> str:
     """Submit a transcription job and return the transcript ID."""
     headers = {
-        "authorization": settings.ASSEMBLYAI_API_KEY,
+        "authorization": settings.ASSEMBLYAI_API_KEY.strip(),
         "content-type": "application/json",
     }
     payload = {
@@ -53,7 +53,7 @@ async def _submit_transcript(upload_url: str) -> str:
 
 async def _poll_transcript(transcript_id: str) -> dict:
     """Poll until the transcript is completed or errored."""
-    headers = {"authorization": settings.ASSEMBLYAI_API_KEY}
+    headers = {"authorization": settings.ASSEMBLYAI_API_KEY.strip()}
     async with httpx.AsyncClient(timeout=30) as client:
         for _ in range(200):  # max ~10 minutes
             r = await client.get(f"{ASSEMBLYAI_BASE}/transcript/{transcript_id}", headers=headers)
