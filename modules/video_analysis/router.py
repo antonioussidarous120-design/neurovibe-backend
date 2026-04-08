@@ -5,6 +5,15 @@ from core.config import settings
 from modules.video_analysis.service import analyze_video, SUPPORTED_FORMATS
 import uuid
 
+CONTENT_TYPES = {
+    "mp4": "video/mp4",
+    "mov": "video/quicktime",
+    "webm": "video/webm",
+    "mp3": "audio/mpeg",
+    "m4a": "audio/mp4",
+    "wav": "audio/wav",
+}
+
 router = APIRouter()
 
 
@@ -29,8 +38,11 @@ async def video_analyze(
     file_id = str(uuid.uuid4())
     file_path = f"{test_user}/video_analysis/{file_id}/{file.filename}"
 
+    content_type = CONTENT_TYPES.get(ext, "application/octet-stream")
     try:
-        db.storage.from_(settings.SUPABASE_BUCKET).upload(file_path, file_bytes)
+        db.storage.from_(settings.SUPABASE_BUCKET).upload(
+            file_path, file_bytes, file_options={"content-type": content_type}
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Supabase storage upload failed: {e}")
 
