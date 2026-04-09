@@ -34,14 +34,18 @@ async def _upload_bytes(file_bytes: bytes) -> str:
     headers = {"authorization": api_key}
     async with httpx.AsyncClient(timeout=180) as client:
         r = await client.post(f"{ASSEMBLYAI_BASE}/upload", headers=headers, content=file_bytes)
+        logger.info(f"[_upload_bytes] status={r.status_code} response={r.text[:200]}")
         r.raise_for_status()
-        return r.json()["upload_url"]
+        upload_url = r.json()["upload_url"]
+        logger.info(f"[_upload_bytes] upload_url={upload_url!r}")
+        return upload_url
 
 
 async def _submit_transcript(upload_url: str) -> str:
     """Submit a transcription job and return the transcript ID."""
+    api_key = settings.ASSEMBLYAI_API_KEY.strip().encode("ascii").decode("ascii")
     headers = {
-        "authorization": settings.ASSEMBLYAI_API_KEY.strip(),
+        "authorization": api_key,
         "content-type": "application/json",
     }
     payload = {
@@ -51,8 +55,10 @@ async def _submit_transcript(upload_url: str) -> str:
         "content_safety": True,
         "iab_categories": True,
     }
+    logger.info(f"[_submit_transcript] upload_url={upload_url!r} payload_keys={list(payload.keys())}")
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(f"{ASSEMBLYAI_BASE}/transcript", headers=headers, json=payload)
+        logger.info(f"[_submit_transcript] status={r.status_code} response={r.text[:500]}")
         r.raise_for_status()
         return r.json()["id"]
 
