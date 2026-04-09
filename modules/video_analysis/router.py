@@ -21,7 +21,7 @@ async def _run_analysis(
     """Background task: run analysis and update video_analysis_jobs with result or error."""
     db = get_supabase()
     start_time = time.time()
-    logger.info(f"[video_analyze] BG START video_job_id={video_job_id} file={filename}")
+    logger.info(f"[_run_analysis] starting — bytes={len(file_bytes)} filename={filename} video_job_id={video_job_id}")
     try:
         result = await analyze_video(file_bytes, filename, file_path, job_id, db)
         elapsed = round(time.time() - start_time, 1)
