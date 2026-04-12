@@ -6,7 +6,7 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-ASSEMBLYAI_BASE = "https://api.assemblyai.com/v2"
+ASSEMBLYAI_BASE = "https://api.assemblyai.com"
 SUPPORTED_FORMATS = {"mp4", "mov", "webm", "m4a", "mp3", "wav"}
 VISUAL_FORMATS = {"mp4", "mov", "webm"}
 
@@ -31,9 +31,9 @@ async def _upload_bytes(file_bytes: bytes) -> str:
         f"stripped length: {len(settings.ASSEMBLYAI_API_KEY.strip())}, "
         f"last char repr: {repr(settings.ASSEMBLYAI_API_KEY[-1])}"
     )
-    headers = {"authorization": api_key}
+    headers = {"Authorization": api_key}
     async with httpx.AsyncClient(timeout=180) as client:
-        r = await client.post(f"{ASSEMBLYAI_BASE}/upload", headers=headers, content=file_bytes)
+        r = await client.post(f"{ASSEMBLYAI_BASE}/v3/upload", headers=headers, content=file_bytes)
         if r.status_code >= 400:
             logger.error(f"[_upload_bytes] status={r.status_code} body={r.text}")
         else:
@@ -48,7 +48,7 @@ async def _submit_transcript(upload_url: str) -> str:
     """Submit a transcription job and return the transcript ID."""
     api_key = settings.ASSEMBLYAI_API_KEY.strip().encode("ascii").decode("ascii")
     headers = {
-        "authorization": api_key,
+        "Authorization": api_key,
         "content-type": "application/json",
     }
     payload = {
@@ -60,7 +60,7 @@ async def _submit_transcript(upload_url: str) -> str:
     }
     logger.info(f"[_submit_transcript] upload_url={upload_url!r} payload_keys={list(payload.keys())}")
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(f"{ASSEMBLYAI_BASE}/transcript", headers=headers, json=payload)
+        r = await client.post(f"{ASSEMBLYAI_BASE}/v3/transcript", headers=headers, json=payload)
         if r.status_code >= 400:
             logger.error(f"[_submit_transcript] status={r.status_code} body={r.text}")
         else:
@@ -71,10 +71,10 @@ async def _submit_transcript(upload_url: str) -> str:
 
 async def _poll_transcript(transcript_id: str) -> dict:
     """Poll until the transcript is completed or errored."""
-    headers = {"authorization": settings.ASSEMBLYAI_API_KEY.strip()}
+    headers = {"Authorization": settings.ASSEMBLYAI_API_KEY.strip()}
     async with httpx.AsyncClient(timeout=30) as client:
         for _ in range(200):  # max ~10 minutes
-            r = await client.get(f"{ASSEMBLYAI_BASE}/transcript/{transcript_id}", headers=headers)
+            r = await client.get(f"{ASSEMBLYAI_BASE}/v3/transcript/{transcript_id}", headers=headers)
             r.raise_for_status()
             data = r.json()
             if data["status"] == "completed":
