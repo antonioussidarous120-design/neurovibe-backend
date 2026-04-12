@@ -40,7 +40,7 @@ async def _upload_bytes(file_bytes: bytes) -> str:
             logger.info(f"[_upload_bytes] status={r.status_code} response={r.text[:200]}")
         r.raise_for_status()
         upload_url = r.json()["upload_url"]
-        logger.info(f"[_upload_bytes] upload_url={upload_url!r}")
+        logger.info(f"[_upload_bytes] got upload_url={upload_url[:80]}")
         return upload_url
 
 
@@ -55,10 +55,7 @@ async def _submit_transcript(upload_url: str) -> str:
     logger.info(f"[_submit_transcript] upload_url={upload_url!r} payload={payload}")
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(f"{ASSEMBLYAI_BASE}/transcript", headers=headers, json=payload)
-        if r.status_code >= 400:
-            logger.error(f"[_submit_transcript] status={r.status_code} body={r.text}")
-        else:
-            logger.info(f"[_submit_transcript] status={r.status_code} response={r.text[:200]}")
+        logger.error(f"[_submit_transcript] status={r.status_code} body={r.text}")
         r.raise_for_status()
         return r.json()["id"]
 
