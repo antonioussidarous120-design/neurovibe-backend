@@ -51,7 +51,7 @@ async def _submit_transcript(upload_url: str) -> str:
         "authorization": api_key,
         "content-type": "application/json",
     }
-    payload = {"audio_url": upload_url}
+    payload = {"audio_url": upload_url, "speech_models": ["universal-2"]}
     logger.info(f"[_submit_transcript] upload_url={upload_url!r} payload={payload}")
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(f"{ASSEMBLYAI_BASE}/transcript", headers=headers, json=payload)
