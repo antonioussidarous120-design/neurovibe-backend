@@ -364,36 +364,97 @@ def _calc_has_movement(ar, shot_changes: list) -> bool:
 
 # ── GPT-4o visual + audio feedback ────────────────────────────────────────────
 
-async def _generate_visual_feedback(audio_scores: dict, visual_scores: dict) -> str:
-    """Generate specific, blunt, actionable feedback combining visual and audio data."""
+async def _generate_visual_feedback(
+    audio_scores: dict,
+    visual_scores: dict,
+    transcript: str,
+    sentiment_results: list,
+) -> dict:
+    """Generate hyper-specific structured feedback. Returns a parsed dict with 6 fields."""
     face_score = visual_scores.get("face_visibility_score")
     text_score = visual_scores.get("text_overlay_score")
     hook_score = visual_scores.get("visual_hook_score")
     cut_score = visual_scores.get("cut_frequency_score")
     has_movement = visual_scores.get("has_movement")
 
-    visual_section = f"""VISUAL ANALYSIS:
-- Visual hook score (first 3 seconds): {hook_score}/100
-- Face visible: {face_score}% of video
-- Text overlays: {text_score}% of video
-- Cut frequency score: {cut_score}/100 (higher = more dynamic editing)
-- Has movement/dynamic content: {has_movement}""" if face_score is not None else "VISUAL ANALYSIS: Not available"
+    visual_section = (
+        f"- Visual hook score (first 3 seconds): {hook_score}/100\n"
+        f"- Face visible: {face_score}% of video\n"
+        f"- Text overlays: {text_score}% of video\n"
+        f"- Cut frequency score: {cut_score}/100\n"
+        f"- Has movement: {has_movement}"
+    ) if face_score is not None else "Visual analysis not available"
 
-    prompt = f"""You are analyzing a marketing video. Here are the measured metrics:
+    # Summarise flat-tone moments for the prompt
+    flat_moments = audio_scores.get("flat_tone_moments", [])
+    flat_summary = (
+        "\n".join(
+            f"  - {m['start_ms']//1000}s–{m['end_ms']//1000}s ({m['duration_seconds']}s, {m['sentiment']}): \"{m['text_preview']}\""
+            for m in flat_moments[:6]
+        ) or "  None detected"
+    )
 
-{visual_section}
+    prompt = f"""You are an expert video coach and content strategist. Analyze this video delivery data and give brutally honest, hyper-specific feedback. Use the actual transcript words. Return JSON with exactly these 6 fields:
 
-AUDIO/DELIVERY ANALYSIS:
+TRANSCRIPT:
+\"\"\"{transcript[:3000]}\"\"\"
+
+DELIVERY METRICS:
 - Tone variety score: {audio_scores.get('tone_variety_score', 'N/A')}/100
 - Energy level score: {audio_scores.get('energy_level_score', 'N/A')}/100
 - Pacing score: {audio_scores.get('pacing_score', 'N/A')}/100
-- Flat tone moments (sections with no sentiment shift): {len(audio_scores.get('flat_tone_moments', []))}
+- Flat tone moments (no sentiment shift):
+{flat_summary}
 
-Give 3-5 specific, blunt, actionable feedback points. Each should be 1-2 sentences.
-Lead with the biggest weaknesses. Be concrete — reference the actual numbers. Examples of the tone:
-"Your first 3 seconds have no face visible and no text overlay — you lose 40% of viewers before you say a word. Start with your face in frame and add a bold text hook immediately."
-"Your tone never changes across {len(audio_scores.get('flat_tone_moments', []))} flat segments — the audience has no reason to keep watching. Add a pattern interrupt every 8-10 seconds."
-Do NOT be generic. Every sentence must reference a real score or timestamp."""
+VISUAL METRICS:
+{visual_section}
+
+Return JSON with exactly these 6 fields:
+
+1. script_vs_delivery_gap: {{
+   "script_score": <number 0-100>,
+   "delivery_score": <number 0-100>,
+   "gap": <number>,
+   "summary": "Your script scored X but your delivery scored Y — your voice is losing Z points of potential.",
+   "reason": "<one specific sentence about what the voice is doing wrong>"
+}}
+
+2. timestamp_feedback: array of 4-6 objects, each: {{
+   "timestamp": "<e.g. 0:08>",
+   "what_happened": "You said [exact words from transcript] in a flat tone",
+   "impact": "This is where X% of your audience leaves",
+   "how_to_fix": "Say it like this instead: [exact rewrite]. Raise your voice on [specific word], pause before [specific word]"
+}}
+
+3. redelivery_script: "<The full transcript rewritten with inline delivery stage directions. Use markers: [RAISE VOICE — emotion], [PAUSE Xs], [SLOW DOWN], [SPEED UP], [LEAN INTO CAMERA], [DROP TO WHISPER]. Must cover the entire script.>"
+
+4. hook_analysis: {{
+   "hook_used": "<exact first sentence from transcript>",
+   "hook_score": <number 0-100>,
+   "what_worked": "<specific thing that worked>",
+   "what_failed": "<specific thing that failed>",
+   "better_hook": "<a completely new scroll-stopping opening line>"
+}}
+
+5. viral_probability: {{
+   "score": <number 0-100>,
+   "breakdown": {{
+      "energy_variation": <number 0-100>,
+      "pacing_score": <number 0-100>,
+      "hook_strength": <number 0-100>,
+      "emotional_range": <number 0-100>
+   }},
+   "what_is_dragging_it_down": "<2-3 specific things killing the viral potential>",
+   "what_would_push_it_higher": "<exactly what changes would increase the score>"
+}}
+
+6. rerecord_checklist: array of 4-5 strings, each specific to their content like:
+   "☐ Raise your voice when you say [exact phrase from transcript]"
+   "☐ Add a 2 second pause after [exact moment]"
+   "☐ Speed up the middle section starting at [timestamp]"
+   "☐ End with higher energy — your last line [quote it] sounds defeated"
+
+Every piece of feedback must reference specific words from the actual transcript — never give generic advice."""
 
     r = await openai_client.chat.completions.create(
         model="gpt-4o",
@@ -401,10 +462,11 @@ Do NOT be generic. Every sentence must reference a real score or timestamp."""
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
+        response_format={"type": "json_object"},
         temperature=0.7,
-        max_tokens=500,
+        max_tokens=2500,
     )
-    return r.choices[0].message.content.strip()
+    return json.loads(r.choices[0].message.content)
 
 
 # ── analyze_video_visuals (public) ─────────────────────────────────────────────
@@ -438,11 +500,15 @@ async def analyze_video_visuals(
             "visual_hook_score": _calc_visual_hook_score(ar, shot_changes),
             "has_movement": _calc_has_movement(ar, shot_changes),
         }
-        visual_scores["visual_feedback"] = await _generate_visual_feedback(audio_data, visual_scores)
+        visual_scores["visual_feedback"] = await _generate_visual_feedback(
+            audio_data, visual_scores,
+            audio_data.get("transcript", ""),
+            audio_data.get("sentiment_results", []),
+        )
         return visual_scores
 
     except Exception as e:
-        return {**_empty_visual_result(), "visual_feedback": f"Visual analysis error: {e}"}
+        return {**_empty_visual_result(), "visual_feedback": None}
     finally:
         if blob_name:
             await _gcs_delete(blob_name, credentials)
@@ -616,7 +682,12 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
         visual_scores = _empty_visual_result()
 
     # ── Step 5: Always generate GPT-4o feedback (audio + visual combined) ─────
-    ai_feedback = await _generate_visual_feedback(audio_scores, visual_scores)
+    ai_feedback = await _generate_visual_feedback(
+        audio_scores,
+        visual_scores,
+        aai_data.get("text", ""),
+        sentiment_results,
+    )
 
     # ── Step 6: Save to Supabase ──────────────────────────────────────────────
     analysis_id = str(uuid.uuid4())
@@ -647,8 +718,8 @@ async def analyze_video(file_bytes: bytes, filename: str, file_path: str, job_id
         "text_overlay_score": visual_scores["text_overlay_score"],
         "visual_hook_score": visual_scores["visual_hook_score"],
         "has_movement": visual_scores["has_movement"],
-        "visual_feedback": ai_feedback,
-        "ai_feedback": ai_feedback,
+        "visual_feedback": ai_feedback,  # JSONB — full structured feedback
+        "ai_feedback": ai_feedback,       # JSONB — same, kept for backwards compat
     }).execute()
 
     logger.info(f"[analyze_video] Analysis complete — analysis_id={analysis_id} warnings={len(warnings)}")
