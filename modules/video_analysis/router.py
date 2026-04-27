@@ -57,6 +57,8 @@ async def video_analyze(
     file_bytes = await file.read()
     if len(file_bytes) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(file_bytes) > 500 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Video file too large. Maximum size is 500MB.")
 
     db = get_supabase()
 
