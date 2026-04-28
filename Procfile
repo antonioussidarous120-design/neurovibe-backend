@@ -1,1 +1,1 @@
-web: uvicorn main:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 300 --workers 1 --limit-request-body 524288000
+web: uvicorn main:app --host 0.0.0.0 --port $PORT
