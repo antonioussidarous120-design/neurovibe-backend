@@ -28,6 +28,7 @@ from modules.content.router import router as content_router
 from modules.hooks.router import router as hooks_router
 from modules.calendar.router import router as calendar_router
 from modules.video_analysis.router import router as video_router
+from modules.generator.router import router as generator_router
 
 app.include_router(upload_router,        prefix="/api/upload",     tags=["Upload"])
 app.include_router(transcription_router, prefix="/api/transcribe", tags=["Transcription"])
@@ -41,6 +42,7 @@ app.include_router(content_router,       prefix="/api/content",    tags=["Conten
 app.include_router(hooks_router,         prefix="/api/hooks",      tags=["Hooks"])
 app.include_router(calendar_router,      prefix="/api/calendar",   tags=["Calendar"])
 app.include_router(video_router,         prefix="/api/video",      tags=["Video Analysis"])
+app.include_router(generator_router,     prefix="/api/generator",  tags=["Generator"])
 
 @app.get("/health")
 def health():
