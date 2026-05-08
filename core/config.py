@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: str = ""
     GOOGLE_CLOUD_PROJECT: str = ""
     GOOGLE_CLOUD_BUCKET: str = ""
-    ALLOWED_ORIGINS: str = '["http://localhost:3000"]'
+    ALLOWED_ORIGINS: str = '["http://localhost:3000","https://neurovibe-frontend-production.up.railway.app","https://neurovibe-backend-production.up.railway.app"]'
     WORDS_PER_SECOND: float = 2.5
     MAX_SEGMENT_WORDS: int = 50
     MIN_SEGMENT_WORDS: int = 10
