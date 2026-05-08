@@ -78,7 +78,7 @@ def _build_fix_suggestions(segments: list, drop_segments: list) -> list:
 async def predict_job(job_id: str, db) -> PredictionResponse:
     res = db.table("job_segments").select("*").eq("job_id", job_id).execute()
     segments = res.data
-    scores = [s["segment_score"] for s in segments if s["segment_score"] is not None]
+    scores = [s["segment_score"] for s in segments if s.get("segment_score") is not None]
     engagement_score = round(statistics.mean(scores), 2) if scores else 0.0
     watch_time  = _sigmoid(engagement_score, 50, 0.07)
     share       = _sigmoid(engagement_score, 65, 0.08)

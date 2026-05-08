@@ -1,16 +1,19 @@
-# Last updated: 2026-03-25
+# Last updated: 2026-05-07
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from core.config import settings
 
 app = FastAPI(title="NeuroVibe Studio API")
 
+# CORS: only allow explicit origins — never wildcard.
+_allowed_origins = settings.get_allowed_origins()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
+    allow_origins=_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 from modules.upload.router import router as upload_router
@@ -40,4 +43,5 @@ app.include_router(calendar_router,      prefix="/api/calendar",   tags=["Calend
 app.include_router(video_router,         prefix="/api/video",      tags=["Video Analysis"])
 
 @app.get("/health")
-def health(): return {"status": "ok"}
+def health():
+    return {"status": "ok", "allowed_origins": _allowed_origins}

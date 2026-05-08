@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 from core.database import get_supabase
-from core.config import settings
+from core.config import settings, TEST_USER_ID
 from modules.video_analysis.service import analyze_video, SUPPORTED_FORMATS
 import uuid
 import logging
@@ -65,9 +65,8 @@ async def get_upload_url(filename: str = Query(..., description="Original filena
             detail=f"Unsupported file type '.{ext}'. Supported: {', '.join(sorted(SUPPORTED_FORMATS))}",
         )
 
-    test_user = "00000000-0000-0000-0000-000000000001"
     file_id = str(uuid.uuid4())
-    file_path = f"{test_user}/video_analysis/{file_id}/{filename}"
+    file_path = f"{TEST_USER_ID}/video_analysis/{file_id}/{filename}"
 
     db = get_supabase()
     try:
