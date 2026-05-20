@@ -10,8 +10,9 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_JWT_SECRET: str = ""
     SUPABASE_BUCKET: str = "neurovibe-uploads"
-    OPENAI_API_KEY: str
+    OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
+    ANTHROPIC_API_KEY: str = ""
     ASSEMBLYAI_API_KEY: str = ""
     GOOGLE_APPLICATION_CREDENTIALS: str = ""
     GOOGLE_CLOUD_PROJECT: str = ""
