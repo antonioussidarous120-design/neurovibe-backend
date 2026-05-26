@@ -47,4 +47,20 @@ app.include_router(generator_router,     prefix="/api/generator",  tags=["Genera
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "allowed_origins": _allowed_origins}
+    db_status = "unknown"
+    db_error = None
+    try:
+        from core.database import get_supabase
+        db = get_supabase()
+        db.table("jobs").select("id").limit(1).execute()
+        db_status = "connected"
+    except Exception as e:
+        db_status = "error"
+        db_error = str(e)
+    return {
+        "status": "ok",
+        "allowed_origins": _allowed_origins,
+        "db": db_status,
+        "db_error": db_error,
+        "supabase_url": settings.SUPABASE_URL[:40] + "..." if settings.SUPABASE_URL else "NOT SET",
+    }
