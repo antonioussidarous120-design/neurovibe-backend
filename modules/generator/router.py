@@ -98,25 +98,56 @@ async def generate_script(req: ScriptRequest):
         "FOMO": "loss aversion / urgency — real consequences of inaction, others already winning, time-sensitive stakes",
     }.get(req.emotion, req.emotion)
 
-    user_prompt = f"""Create a neuroscience-engineered script for:
+    # Platform-specific output format instructions
+    if req.platform == "Email":
+        format_instructions = """CRITICAL: This is an EMAIL. Use ONLY this exact format — no HOOK/CAPTION labels:
 
-PRODUCT/SERVICE: {req.product}
-PLATFORM: {platform_context}
-TARGET EMOTION: {emotion_context}
+SUBJECT: [6-10 words. Open loop or shocking specific stat. Makes them NEED to open it. NO clickbait, NO "RE:", NO fake urgency like "URGENT".]
 
-Apply ALL 7 neuroscience triggers. Use current {req.platform} trend formats. Be SPECIFIC and UNEXPECTED — make this stop someone mid-scroll.
+BODY:
+[Line 1: Directly continues the subject line's promise. Specific fact or result.]
+[Line 2: Agitate — what they're missing or losing right now. Use "you".]
+[Line 3: The mechanism — what makes this different/unique. Specific.]
+[Line 4: Social proof with a number. "X people already did Y in Z days."]
+[Line 5: Make the action feel inevitable, not optional.]
 
-Format your response with EXACTLY these labels on separate lines:
+CTA: [One button/link text + 1 sentence of context. Loss aversion or identity. NOT "Click here" or "Learn more".]
+
+SELF-CHECK: Is every line as specific as line 1? Replace any vague motivation with concrete facts."""
+    elif req.platform == "Facebook Ad":
+        format_instructions = """CRITICAL: This is a FACEBOOK/INSTAGRAM AD. Use this exact format:
+
+HOOK: [Scroll-stopping headline. Specific result or bold claim. 5-10 words.]
+
+BODY: [3-4 lines. Lead with biggest benefit. Add social proof. Remove main objection. Short paragraphs.]
+
+CTA: [Button text + urgency line. Direct. Specific. NOT "Learn more" or "Click here".]
+
+CAPTION: [N/A — not needed for ads]
+
+SELF-CHECK: Does every line pass the specificity test? Replace vague lines before submitting."""
+    else:
+        format_instructions = """Format your response with EXACTLY these labels on separate lines:
 
 HOOK: [2-8 words max. Pattern interrupt. Creates open loop. Stops scroll cold. NO questions, NO "Picture this", NO "Ever wonder". Must be something only this specific product can say.]
 
-BODY: [3-5 punchy lines. Agitate pain/desire. Use "you". Include at least ONE specific number, result, or timeframe. Build emotional intensity — NEVER default to vague motivation ("you're unstoppable", "feel the energy"). Every line must be as specific as the first line.]
+BODY: [3-5 punchy lines. Agitate pain/desire. Use "you". Include at least ONE specific number, result, or timeframe. Build emotional intensity — NEVER default to vague motivation ("you're unstoppable", "feel the energy", "grab the momentum"). Every line must be as specific as the hook.]
 
 CTA: [1-2 lines. Feels like relief, not a request. Tied to the emotional journey. Use loss aversion or identity language. Make the action feel small and immediate. NEVER "Click the link", "Check out", or "Celebrate the new you".]
 
 CAPTION: [120-150 chars. First 5 words magnetic. Core value + 3-5 hashtags: 1 mega, 1 niche, 1 branded.]
 
 SELF-CHECK before finalizing: scan your output for any banned phrases or vague motivation lines. If you find any, replace them with specific, concrete alternatives before submitting."""
+
+    user_prompt = f"""Create a neuroscience-engineered script for:
+
+PRODUCT/SERVICE: {req.product}
+PLATFORM: {req.platform}
+TARGET EMOTION: {emotion_context}
+
+Apply ALL 7 neuroscience triggers. Be SPECIFIC and UNEXPECTED. Every line must earn its place.
+
+{format_instructions}"""
 
     r = await client.chat.completions.create(
         model=settings.OPENAI_MODEL,
