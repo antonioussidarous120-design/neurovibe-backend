@@ -69,10 +69,17 @@ EMAIL:
 - MAINTAIN SPECIFICITY THROUGHOUT — if your hook is specific, every line after must be equally specific. Never trade specificity for vague motivation mid-script.
 
 ## BANNED PHRASES (automatic quality failures):
-Generic motivation fluff: "You're unstoppable", "Feel the energy", "The world waits", "Celebrate the new you", "Live your best life", "Chase your dreams", "Be the change", "Your journey starts", "Embrace the transformation", "Grab the momentum"
-Weak openers: "Picture this:", "Ever wonder", "Have you ever", "Hey guys", "Let's talk about it", "So you want to"
-Generic CTAs: "Click the link", "Check out my bio", "Check out our [X]", "Learn more", "Get started today"
-Filler transitions: "But wait", "Here's the thing", "The truth is" (overused)
+Generic motivation fluff: "You're unstoppable", "Feel the energy", "The world waits", "Celebrate the new you", "Live your best life", "Chase your dreams", "Be the change", "Your journey starts", "Embrace the transformation", "Grab the momentum", "level up", "game changer", "change your life", "transform your life", "unlock your potential"
+Weak openers: "Picture this:", "Ever wonder", "Have you ever", "Hey guys", "Let's talk about it", "So you want to", "Imagine if", "What if I told you"
+Vague mid-script words: "imagine", "picture", "busy folks", "people like you", "everyone knows", "we all know", "things", "stuff", "something", "amazing", "incredible", "powerful", "awesome"
+Generic CTAs: "Click the link", "Check out my bio", "Check out our [X]", "Learn more", "Get started today", "Grab yours", "Grab it", "Don't miss out", "Take action now", "Start your journey"
+Filler transitions: "But wait", "Here's the thing", "The truth is" (overused), "And the best part", "Not only that"
+
+## SPECIFICITY RULES (non-negotiable):
+- NEVER use vague audience descriptors ("busy people", "everyone", "most people") — name the EXACT person ("28-year-old marketing manager", "new mom who hasn't slept in weeks")
+- NEVER use vague results ("see results", "feel better", "make money") — use exact numbers and timeframes ("lost 11 lbs in 3 weeks", "added $2,300 in 6 days")
+- NEVER use vague product descriptions — name the mechanism ("the 4-ingredient formula", "the 12-minute protocol", "the one swap that cuts cravings by 60%")
+- If you catch yourself writing a line any other product could say, delete it and rewrite with THIS product's unique angle
 
 ## THE SPECIFICITY TEST — before writing each line, ask:
 - Can I make this more specific? (add a number, name, timeframe, or result)
