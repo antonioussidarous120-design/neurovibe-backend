@@ -3,11 +3,15 @@ import json
 from fastapi import APIRouter
 from pydantic import BaseModel
 from openai import AsyncOpenAI
+import anthropic
 from supabase import create_client
 from core.config import settings
 
 router = APIRouter()
-client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+# Claude for script generation (better instruction-following, sharper creative writing)
+claude_client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+# OpenAI kept for scoring (fast, cheap, structured JSON)
+openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 def get_supabase():
@@ -75,6 +79,17 @@ Vague mid-script words: "imagine", "picture", "busy folks", "people like you", "
 Generic CTAs: "Click the link", "Check out my bio", "Check out our [X]", "Learn more", "Get started today", "Grab yours", "Grab it", "Don't miss out", "Take action now", "Start your journey"
 Filler transitions: "But wait", "Here's the thing", "The truth is" (overused), "And the best part", "Not only that"
 
+## VAGUE INPUT PROTOCOL (critical):
+When the product/service description is broad or one-word (e.g. "cooking", "fitness", "business", "skincare"), DO NOT write to the vague word. Instead:
+1. Infer the most specific, high-pain, commercially compelling version of that product
+2. Write to THAT specific version — as if the user had described it fully
+Examples:
+- "cooking" → "15-minute weeknight meal app for adults who eat takeout or cereal for dinner"
+- "fitness" → "home workout program for people who've quit the gym 3 times"
+- "skincare" → "3-step AM routine for people whose skin breaks out from stress"
+- "business" → "freelance client-landing system for people billing under $2k/month"
+Never mention that you inferred anything — just write the best script for the specific version you chose.
+
 ## SPECIFICITY RULES (non-negotiable):
 - NEVER use vague audience descriptors ("busy people", "everyone", "most people") — name the EXACT person ("28-year-old marketing manager", "new mom who hasn't slept in weeks")
 - NEVER use vague results ("see results", "feel better", "make money") — use exact numbers and timeframes ("lost 11 lbs in 3 weeks", "added $2,300 in 6 days")
@@ -124,7 +139,7 @@ Only include triggers scoring below 60 in trigger_fixes. If all triggers score 6
 async def score_script_async(script_text: str, user_id: str | None, script_id: str | None) -> dict:
     """Score a script using gpt-4o-mini and optionally save to Supabase."""
     try:
-        score_response = await client.chat.completions.create(
+        score_response = await openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a precise neuromarketing analyst. Return only valid JSON."},
@@ -244,19 +259,15 @@ Apply ALL 7 neuroscience triggers. Be SPECIFIC and UNEXPECTED. Every line must e
 
 {format_instructions}"""
 
-    # Generate script and score it concurrently
-    generate_task = client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": NEUROSCIENCE_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.85,
-        max_tokens=700,
+    # Generate script with Claude (better instruction-following and creative quality)
+    r = await claude_client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=900,
+        temperature=1,  # Claude uses 1 as max for creative tasks
+        system=NEUROSCIENCE_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_prompt}],
     )
-
-    r = await generate_task
-    script_text = r.choices[0].message.content.strip()
+    script_text = r.content[0].text.strip()
 
     # Score concurrently — don't wait for it to block the response
     viral_score = await score_script_async(script_text, req.user_id, None)
