@@ -1,16 +1,25 @@
+import asyncio
+import json
 from fastapi import APIRouter
 from pydantic import BaseModel
 from openai import AsyncOpenAI
+from supabase import create_client
 from core.config import settings
 
 router = APIRouter()
 client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
+def get_supabase():
+    key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_KEY or settings.SUPABASE_ANON_KEY
+    return create_client(settings.SUPABASE_URL, key)
+
+
 class ScriptRequest(BaseModel):
     product: str
     platform: str
     emotion: str
+    user_id: str | None = None
 
 
 NEUROSCIENCE_SYSTEM_PROMPT = """You are NeuroVibe — an elite content strategist trained in neuroscience, behavioral psychology, and viral platform intelligence. You write scripts that are neurologically engineered to stop scrolls, trigger emotional responses, and drive action.
@@ -59,10 +68,10 @@ EMAIL:
 - CTA must feel like natural emotional conclusion, not a request
 - MAINTAIN SPECIFICITY THROUGHOUT — if your hook is specific, every line after must be equally specific. Never trade specificity for vague motivation mid-script.
 
-## BANNED PHRASES (never write these — they are automatic quality failures):
-Generic motivation fluff: "You're unstoppable", "Feel the energy", "The world waits", "Celebrate the new you", "Live your best life", "Chase your dreams", "Be the change", "Your journey starts", "Embrace the transformation"
+## BANNED PHRASES (automatic quality failures):
+Generic motivation fluff: "You're unstoppable", "Feel the energy", "The world waits", "Celebrate the new you", "Live your best life", "Chase your dreams", "Be the change", "Your journey starts", "Embrace the transformation", "Grab the momentum"
 Weak openers: "Picture this:", "Ever wonder", "Have you ever", "Hey guys", "Let's talk about it", "So you want to"
-Generic CTAs: "Click the link", "Check out my bio", "Check out our [X]", "Learn more", "Get started today" (too vague)
+Generic CTAs: "Click the link", "Check out my bio", "Check out our [X]", "Learn more", "Get started today"
 Filler transitions: "But wait", "Here's the thing", "The truth is" (overused)
 
 ## THE SPECIFICITY TEST — before writing each line, ask:
@@ -78,16 +87,95 @@ If a line fails any of these, rewrite it.
 - Loss frame close: "Every [time unit] you don't [action] is another [specific loss]"
 """
 
+SCORE_PROMPT = """You are a neuromarketing analyst scoring a social media script on 7 psychological triggers.
+
+Script to score:
+{script}
+
+Score each trigger 0-100 based on how effectively the script uses it. Be honest and critical.
+
+Return ONLY valid JSON in this exact shape — no explanation, no markdown:
+{{
+  "overall_score": <weighted average, 0-100 integer>,
+  "trigger_scores": {{
+    "Pattern Interrupt": <0-100>,
+    "Open Loop": <0-100>,
+    "Loss Aversion": <0-100>,
+    "Mirror Neurons": <0-100>,
+    "Dopamine Reward Loop": <0-100>,
+    "Social Proof Specificity": <0-100>,
+    "Emotional Contagion": <0-100>
+  }},
+  "trigger_fixes": {{
+    "<trigger name>": "<one specific, actionable 1-line fix for this exact script>"
+  }}
+}}
+
+Only include triggers scoring below 60 in trigger_fixes. If all triggers score 60+, trigger_fixes should be empty {{}}."""
+
+
+async def score_script_async(script_text: str, user_id: str | None, script_id: str | None) -> dict:
+    """Score a script using gpt-4o-mini and optionally save to Supabase."""
+    try:
+        score_response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a precise neuromarketing analyst. Return only valid JSON."},
+                {"role": "user", "content": SCORE_PROMPT.format(script=script_text)},
+            ],
+            temperature=0.3,
+            max_tokens=500,
+            response_format={"type": "json_object"},
+        )
+        score_data = json.loads(score_response.choices[0].message.content)
+
+        # Save to Supabase asynchronously (non-blocking)
+        if user_id or script_id:
+            try:
+                db = get_supabase()
+                db.table("viral_scores").insert({
+                    "script_id": script_id,
+                    "user_id": user_id,
+                    "overall_score": score_data.get("overall_score", 0),
+                    "trigger_scores": score_data.get("trigger_scores", {}),
+                    "trigger_fixes": score_data.get("trigger_fixes", {}),
+                }).execute()
+            except Exception:
+                pass  # Non-fatal
+
+        return score_data
+    except Exception:
+        # Return neutral score if scoring fails — never block the main response
+        return {
+            "overall_score": 0,
+            "trigger_scores": {},
+            "trigger_fixes": {},
+        }
+
 
 @router.post("/script")
 async def generate_script(req: ScriptRequest):
-    platform_context = {
-        "TikTok": "TikTok (15-60 sec, vertical video, Gen Z + Millennial, fast-paced, algorithm rewards completion rate + shares + comments, 40% watched muted)",
-        "Instagram Reels": "Instagram Reels (15-90 sec, vertical video, visual-forward, saves + shares boost algorithm, mix of polished and authentic)",
-        "YouTube Shorts": "YouTube Shorts (under 60 sec, higher intent audience, subscribers matter, drives long-form views)",
-        "Email": "Email marketing (subject line = hook, 5 lines max body, single clear CTA, professional but human tone)",
-        "Facebook Ad": "Facebook/Instagram Ad (scroll-stopping headline, benefit-led body, social proof, direct CTA)",
-    }.get(req.platform, req.platform)
+    # Fetch brand profile if user_id provided
+    brand_block = ""
+    if req.user_id:
+        try:
+            db = get_supabase()
+            res = db.table("brand_profiles").select("*").eq("user_id", req.user_id).maybe_single().execute()
+            if res.data:
+                bp = res.data
+                parts = []
+                if bp.get("niche"):
+                    parts.append(f"- Niche: {bp['niche']}")
+                if bp.get("audience"):
+                    parts.append(f"- Target audience: {bp['audience']}")
+                if bp.get("tone"):
+                    parts.append(f"- Brand tone: {bp['tone']}")
+                if bp.get("voice_notes"):
+                    parts.append(f"- Voice rules: {bp['voice_notes']}")
+                if parts:
+                    brand_block = "\n\nBRAND CONTEXT (apply to every line — makes this feel like THEIR brand, not a template):\n" + "\n".join(parts) + "\n"
+        except Exception:
+            pass  # Non-fatal — generate without brand context
 
     emotion_context = {
         "Excitement": "excitement/hype — energy, momentum, forward motion, big promises, celebratory tone",
@@ -98,11 +186,11 @@ async def generate_script(req: ScriptRequest):
         "FOMO": "loss aversion / urgency — real consequences of inaction, others already winning, time-sensitive stakes",
     }.get(req.emotion, req.emotion)
 
-    # Platform-specific output format instructions
+    # Platform-specific output format
     if req.platform == "Email":
         format_instructions = """CRITICAL: This is an EMAIL. Use ONLY this exact format — no HOOK/CAPTION labels:
 
-SUBJECT: [6-10 words. Open loop or shocking specific stat. Makes them NEED to open it. NO clickbait, NO "RE:", NO fake urgency like "URGENT".]
+SUBJECT: [6-10 words. Open loop or shocking specific stat. Makes them NEED to open it.]
 
 BODY:
 [Line 1: Directly continues the subject line's promise. Specific fact or result.]
@@ -119,11 +207,11 @@ SELF-CHECK: Is every line as specific as line 1? Replace any vague motivation wi
 
 HOOK: [Scroll-stopping headline. Specific result or bold claim. 5-10 words.]
 
-BODY: [3-4 lines. Lead with biggest benefit. Add social proof. Remove main objection. Short paragraphs.]
+BODY: [3-4 lines. Lead with biggest benefit. Add social proof. Remove main objection.]
 
 CTA: [Button text + urgency line. Direct. Specific. NOT "Learn more" or "Click here".]
 
-CAPTION: [N/A — not needed for ads]
+CAPTION: [N/A]
 
 SELF-CHECK: Does every line pass the specificity test? Replace vague lines before submitting."""
     else:
@@ -131,25 +219,26 @@ SELF-CHECK: Does every line pass the specificity test? Replace vague lines befor
 
 HOOK: [2-8 words max. Pattern interrupt. Creates open loop. Stops scroll cold. NO questions, NO "Picture this", NO "Ever wonder". Must be something only this specific product can say.]
 
-BODY: [3-5 punchy lines. Agitate pain/desire. Use "you". Include at least ONE specific number, result, or timeframe. Build emotional intensity — NEVER default to vague motivation ("you're unstoppable", "feel the energy", "grab the momentum"). Every line must be as specific as the hook.]
+BODY: [3-5 punchy lines. Agitate pain/desire. Use "you". Include at least ONE specific number, result, or timeframe. Build emotional intensity — NEVER default to vague motivation. Every line must be as specific as the hook.]
 
 CTA: [1-2 lines. Feels like relief, not a request. Tied to the emotional journey. Use loss aversion or identity language. Make the action feel small and immediate. NEVER "Click the link", "Check out", or "Celebrate the new you".]
 
 CAPTION: [120-150 chars. First 5 words magnetic. Core value + 3-5 hashtags: 1 mega, 1 niche, 1 branded.]
 
-SELF-CHECK before finalizing: scan your output for any banned phrases or vague motivation lines. If you find any, replace them with specific, concrete alternatives before submitting."""
+SELF-CHECK before finalizing: scan your output for any banned phrases or vague motivation lines. Replace them with specific, concrete alternatives."""
 
     user_prompt = f"""Create a neuroscience-engineered script for:
 
 PRODUCT/SERVICE: {req.product}
 PLATFORM: {req.platform}
 TARGET EMOTION: {emotion_context}
-
+{brand_block}
 Apply ALL 7 neuroscience triggers. Be SPECIFIC and UNEXPECTED. Every line must earn its place.
 
 {format_instructions}"""
 
-    r = await client.chat.completions.create(
+    # Generate script and score it concurrently
+    generate_task = client.chat.completions.create(
         model=settings.OPENAI_MODEL,
         messages=[
             {"role": "system", "content": NEUROSCIENCE_SYSTEM_PROMPT},
@@ -158,4 +247,14 @@ Apply ALL 7 neuroscience triggers. Be SPECIFIC and UNEXPECTED. Every line must e
         temperature=0.85,
         max_tokens=700,
     )
-    return {"script": r.choices[0].message.content.strip()}
+
+    r = await generate_task
+    script_text = r.choices[0].message.content.strip()
+
+    # Score concurrently — don't wait for it to block the response
+    viral_score = await score_script_async(script_text, req.user_id, None)
+
+    return {
+        "script": script_text,
+        "viral_score": viral_score,
+    }
