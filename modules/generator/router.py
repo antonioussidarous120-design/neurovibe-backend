@@ -54,12 +54,28 @@ EMAIL:
 ## SCRIPT QUALITY RULES:
 - Every sentence earns the right to the next — no filler
 - Use sentence fragments. Short punches. Like this. Vary the rhythm.
-- Build emotional intensity line by line — NEVER plateau
-- End lines on strong words (recency effect — last word is remembered most)
+- Build emotional intensity line by line — NEVER plateau or default to vague language
+- End lines on strong, concrete words (recency effect — last word is remembered most)
 - CTA must feel like natural emotional conclusion, not a request
-- NEVER use: "Picture this:", "Ever wonder", "Hey guys", "Have you ever", "Let's talk about it"
-- NEVER use safe/generic humor (couch jokes, pet distractions, "comedy zone") — it signals low-quality content
-- NEVER use generic CTAs: "Click the link", "Check out my bio", "Check out our [X] in the link"
+- MAINTAIN SPECIFICITY THROUGHOUT — if your hook is specific, every line after must be equally specific. Never trade specificity for vague motivation mid-script.
+
+## BANNED PHRASES (never write these — they are automatic quality failures):
+Generic motivation fluff: "You're unstoppable", "Feel the energy", "The world waits", "Celebrate the new you", "Live your best life", "Chase your dreams", "Be the change", "Your journey starts", "Embrace the transformation"
+Weak openers: "Picture this:", "Ever wonder", "Have you ever", "Hey guys", "Let's talk about it", "So you want to"
+Generic CTAs: "Click the link", "Check out my bio", "Check out our [X]", "Learn more", "Get started today" (too vague)
+Filler transitions: "But wait", "Here's the thing", "The truth is" (overused)
+
+## THE SPECIFICITY TEST — before writing each line, ask:
+- Can I make this more specific? (add a number, name, timeframe, or result)
+- Is this something only THIS product can say, or could any product say it?
+- Does this line make someone feel something, or just fill space?
+If a line fails any of these, rewrite it.
+
+## STRONG CTA FORMULA:
+- Reference others already winning: "While you're reading this, [X people] are on Day [X]"
+- Make the action feel tiny: "[Product] — [small time commitment] from now, you've already started"
+- Identity lock-in: "People who [identity] don't wait. [Action]."
+- Loss frame close: "Every [time unit] you don't [action] is another [specific loss]"
 """
 
 
@@ -92,13 +108,15 @@ Apply ALL 7 neuroscience triggers. Use current {req.platform} trend formats. Be 
 
 Format your response with EXACTLY these labels on separate lines:
 
-HOOK: [2-8 words max. Pattern interrupt. Creates open loop. Stops scroll cold. NO questions, NO "Picture this", NO "Ever wonder".]
+HOOK: [2-8 words max. Pattern interrupt. Creates open loop. Stops scroll cold. NO questions, NO "Picture this", NO "Ever wonder". Must be something only this specific product can say.]
 
-BODY: [3-5 punchy lines. Agitate the pain/desire. Use "you". Include one specific number or proof point. Build emotional intensity. Short sentences. No long paragraphs.]
+BODY: [3-5 punchy lines. Agitate pain/desire. Use "you". Include at least ONE specific number, result, or timeframe. Build emotional intensity — NEVER default to vague motivation ("you're unstoppable", "feel the energy"). Every line must be as specific as the first line.]
 
-CTA: [1-2 lines. Feels like relief not a request. Tied to the emotional journey. Specific action. Use FOMO or identity language. NOT "Click the link" or "Check out".]
+CTA: [1-2 lines. Feels like relief, not a request. Tied to the emotional journey. Use loss aversion or identity language. Make the action feel small and immediate. NEVER "Click the link", "Check out", or "Celebrate the new you".]
 
-CAPTION: [120-150 chars. First 5 words magnetic. Core value + 3-5 hashtags: 1 mega, 1 niche, 1 branded.]"""
+CAPTION: [120-150 chars. First 5 words magnetic. Core value + 3-5 hashtags: 1 mega, 1 niche, 1 branded.]
+
+SELF-CHECK before finalizing: scan your output for any banned phrases or vague motivation lines. If you find any, replace them with specific, concrete alternatives before submitting."""
 
     r = await client.chat.completions.create(
         model=settings.OPENAI_MODEL,
