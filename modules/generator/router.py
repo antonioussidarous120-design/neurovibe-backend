@@ -72,6 +72,15 @@ EMAIL:
 - CTA must feel like natural emotional conclusion, not a request
 - MAINTAIN SPECIFICITY THROUGHOUT — if your hook is specific, every line after must be equally specific. Never trade specificity for vague motivation mid-script.
 
+## HUMAN VOICE RULES (most scripts fail here):
+- Write like a real person talking on camera — raw, direct, slightly imperfect
+- NEVER write a "clever" line that sounds constructed. If it reads like a tagline or an ad, rewrite it.
+- Avoid overly neat analogies or metaphors that nobody would actually say out loud ("tastes like a hostage situation", "a war on your wallet") — if it's too polished, it's AI
+- Use the rhythm of actual speech: short bursts, half-thoughts, the way people actually talk
+- THE TEST: read every line out loud. If it would sound weird coming out of a real person's mouth on camera, cut it.
+- Contractions always. Run-ons okay. Perfect grammar never.
+- The goal is for viewers to think "this person gets me" — not "this is well-written copy"
+
 ## BANNED PHRASES (automatic quality failures):
 Generic motivation fluff: "You're unstoppable", "Feel the energy", "The world waits", "Celebrate the new you", "Live your best life", "Chase your dreams", "Be the change", "Your journey starts", "Embrace the transformation", "Grab the momentum", "level up", "game changer", "change your life", "transform your life", "unlock your potential"
 Weak openers: "Picture this:", "Ever wonder", "Have you ever", "Hey guys", "Let's talk about it", "So you want to", "Imagine if", "What if I told you"
