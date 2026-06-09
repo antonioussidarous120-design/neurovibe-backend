@@ -54,8 +54,10 @@ async def _run_analysis(
 @router.get("/upload-url")
 async def get_upload_url(filename: str = Query(..., description="Original filename including extension")):
     """
-    Legacy endpoint — kept for backwards compatibility but redirects to direct upload.
-    Returns a fake signed URL pointing to our own /upload endpoint.
+    Returns a presigned Supabase storage upload URL.
+    Frontend uploads directly to Supabase (bypassing Railway size limits),
+    then calls POST /analyze with the returned file_path.
+    Storage bucket now has open RLS policies so anon uploads work.
     """
     ext = filename.rsplit(".", 1)[-1].lower()
     if ext not in SUPPORTED_FORMATS:
@@ -63,10 +65,25 @@ async def get_upload_url(filename: str = Query(..., description="Original filena
             status_code=400,
             detail=f"Unsupported file type '.{ext}'. Supported: {', '.join(sorted(SUPPORTED_FORMATS))}",
         )
+
     file_id = str(uuid.uuid4())
     file_path = f"{TEST_USER_ID}/video_analysis/{file_id}/{filename}"
-    # Return our own upload endpoint so frontend uses multipart upload
-    return {"upload_url": None, "file_path": file_path, "use_direct_upload": True}
+
+    db = get_supabase()
+    try:
+        result = db.storage.from_(settings.SUPABASE_BUCKET).create_signed_upload_url(file_path)
+        if isinstance(result, dict):
+            signed_url = result.get("signedURL") or result.get("signed_url") or result.get("url")
+        else:
+            signed_url = getattr(result, "signed_url", None) or getattr(result, "signedURL", None)
+        if not signed_url:
+            raise ValueError(f"Unexpected response from Supabase storage: {result}")
+    except Exception as e:
+        logger.error(f"[get_upload_url] failed to create signed URL: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not generate upload URL: {e}")
+
+    logger.info(f"[get_upload_url] created signed URL for {file_path}")
+    return {"upload_url": signed_url, "file_path": file_path}
 
 
 @router.post("/upload")
