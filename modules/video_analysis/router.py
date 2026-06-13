@@ -83,7 +83,8 @@ async def get_upload_url(filename: str = Query(..., description="Original filena
         raise HTTPException(status_code=500, detail=f"Could not generate upload URL: {e}")
 
     logger.info(f"[get_upload_url] created signed URL for {file_path}")
-    return {"upload_url": signed_url, "file_path": file_path}
+    # Return both keys so frontend can use either `signed_url` or `upload_url`
+    return {"signed_url": signed_url, "upload_url": signed_url, "file_path": file_path}
 
 
 @router.post("/upload")

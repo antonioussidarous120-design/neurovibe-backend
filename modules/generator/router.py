@@ -118,31 +118,45 @@ If a line fails any of these, rewrite it.
 - Loss frame close: "Every [time unit] you don't [action] is another [specific loss]"
 """
 
-SCORE_PROMPT = """You are a neuromarketing analyst scoring a social media script on 7 psychological triggers.
+SCORE_PROMPT = """You are a brutally honest neuromarketing analyst. Your job is to score a social media script on 7 psychological triggers — and be ACCURATE, not generous.
 
 Script to score:
 {script}
 
-Score each trigger 0-100 based on how effectively the script uses it. Be honest and critical.
+SCORING RULES:
+- Most scripts score between 45-75. A 90+ means it's genuinely exceptional.
+- Each trigger must be evaluated INDEPENDENTLY based on what's actually in this specific script.
+- DO NOT round to nice numbers. 67, 53, 81 are good scores. 50, 60, 70 are lazy scores.
+- If the script uses a trigger well, score high. If it barely uses it or uses it poorly, score low.
+- The overall_score should be a weighted average where Pattern Interrupt and Emotional Contagion count 1.5x.
+
+TRIGGER DEFINITIONS (score based on these):
+- Pattern Interrupt (0-100): Does the hook break expected patterns? Is it genuinely surprising? Score low if the opener is predictable or sounds like any other ad.
+- Open Loop (0-100): Does it create a curiosity gap the viewer NEEDS to close? Low if the hook gives away the answer immediately.
+- Loss Aversion (0-100): Does it frame the problem as something they're LOSING right now? Low if it only describes gain without fear of loss.
+- Mirror Neurons (0-100): Does "you" language make specific people feel personally seen? Low if it's generic.
+- Dopamine Reward Loop (0-100): Does it tease → build tension → partially reveal → build more? Low if it's flat with no tension arc.
+- Social Proof Specificity (0-100): Does it use specific numbers/names/results that feel real? Low if it uses "most people" or no social proof.
+- Emotional Contagion (0-100): Does it embed high-arousal emotion (awe, fear, excitement, anger)? Low if it's neutral or motivational-poster-generic.
 
 Return ONLY valid JSON in this exact shape — no explanation, no markdown:
 {{
-  "overall_score": <weighted average, 0-100 integer>,
+  "overall_score": <weighted average as integer, be accurate not generous>,
   "trigger_scores": {{
-    "Pattern Interrupt": <0-100>,
-    "Open Loop": <0-100>,
-    "Loss Aversion": <0-100>,
-    "Mirror Neurons": <0-100>,
-    "Dopamine Reward Loop": <0-100>,
-    "Social Proof Specificity": <0-100>,
-    "Emotional Contagion": <0-100>
+    "Pattern Interrupt": <0-100, specific to this script>,
+    "Open Loop": <0-100, specific to this script>,
+    "Loss Aversion": <0-100, specific to this script>,
+    "Mirror Neurons": <0-100, specific to this script>,
+    "Dopamine Reward Loop": <0-100, specific to this script>,
+    "Social Proof Specificity": <0-100, specific to this script>,
+    "Emotional Contagion": <0-100, specific to this script>
   }},
   "trigger_fixes": {{
-    "<trigger name>": "<one specific, actionable 1-line fix for this exact script>"
+    "<trigger name>": "<one specific, actionable fix using the ACTUAL words from this script — not generic advice>"
   }}
 }}
 
-Only include triggers scoring below 60 in trigger_fixes. If all triggers score 60+, trigger_fixes should be empty {{}}."""
+Only include triggers scoring below 65 in trigger_fixes. If all triggers score 65+, trigger_fixes should be empty {{}}."""
 
 
 async def score_script_async(script_text: str, user_id: str | None, script_id: str | None) -> dict:
@@ -151,11 +165,11 @@ async def score_script_async(script_text: str, user_id: str | None, script_id: s
         score_response = await openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a precise neuromarketing analyst. Return only valid JSON."},
+                {"role": "system", "content": "You are a brutally honest neuromarketing analyst. Return only valid JSON. Never give round numbers — be precise and script-specific."},
                 {"role": "user", "content": SCORE_PROMPT.format(script=script_text)},
             ],
-            temperature=0.3,
-            max_tokens=500,
+            temperature=0.6,
+            max_tokens=600,
             response_format={"type": "json_object"},
         )
         score_data = json.loads(score_response.choices[0].message.content)
