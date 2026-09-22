@@ -25,6 +25,17 @@ async def run_pipeline(job_id: str, background_tasks: BackgroundTasks, request: 
 
     # Enforce plan limits for script_analyzer feature
     status, plan = check_feature_access(db, user_id, "script_analyzer")
+    if status == "blocked":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "feature_blocked",
+                "feature": "script_analyzer",
+                "plan": plan["plan_name"],
+                "upgrade_to": UPGRADE_TO.get("script_analyzer", {}).get(plan["plan_name"], "creator"),
+                "message": "Script Analyzer is not available on this plan.",
+            },
+        )
     if status == "limit_reached":
         raise HTTPException(
             status_code=429,

@@ -202,6 +202,7 @@ async def upload_video(
 
 @router.post("/analyze")
 async def video_analyze(
+    request: Request,
     background_tasks: BackgroundTasks,
     req: AnalyzeRequest,
 ):
@@ -218,7 +219,35 @@ async def video_analyze(
             detail=f"Unsupported file type '.{ext}'. Supported: {', '.join(sorted(SUPPORTED_FORMATS))}",
         )
 
+    user_id = get_user_id(request)
     db = get_supabase()
+
+    status, plan = check_feature_access(db, user_id, "video_analysis")
+    if status == "blocked":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "feature_blocked",
+                "feature": "video_analysis",
+                "plan": plan["plan_name"],
+                "upgrade_to": UPGRADE_TO.get("video_analysis", {}).get(plan["plan_name"], "creator"),
+                "message": "Video Analysis requires the Creator or Pro plan.",
+            },
+        )
+    if status == "limit_reached":
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "limit_reached",
+                "feature": "video_analysis",
+                "plan": plan["plan_name"],
+                "used": plan.get("video_analyses_used", 0),
+                "limit": PLAN_FEATURES.get(plan["plan_name"], {}).get("video_analysis"),
+                "upgrade_to": UPGRADE_TO.get("video_analysis", {}).get(plan["plan_name"], "pro"),
+                "message": f"You've used all {PLAN_FEATURES.get(plan['plan_name'], {}).get('video_analysis')} Video Analysis runs this month.",
+            },
+        )
+
     video_job_id = str(uuid.uuid4())
 
     db.table("video_analysis_jobs").insert({
@@ -230,6 +259,7 @@ async def video_analyze(
     logger.info(f"[video_analyze] QUEUED video_job_id={video_job_id} file_path={file_path}")
 
     background_tasks.add_task(_run_analysis, video_job_id, file_path, filename, req.job_id)
+    increment_feature(db, user_id, "video_analysis", plan)
 
     return {"job_id": video_job_id, "status": "processing"}
 

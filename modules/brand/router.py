@@ -1,18 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from supabase import create_client
-from core.config import settings
+from core.database import get_supabase
+from core.auth import get_user_id
 
 router = APIRouter()
 
 
-def get_supabase():
-    key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_KEY or settings.SUPABASE_ANON_KEY
-    return create_client(settings.SUPABASE_URL, key)
-
-
 class BrandProfileRequest(BaseModel):
-    user_id: str
     niche: str = ""
     audience: str = ""
     tone: str = ""
@@ -21,14 +15,14 @@ class BrandProfileRequest(BaseModel):
 
 
 @router.get("/profile")
-async def get_brand_profile(user_id: str):
-    """Fetch brand profile for a user. Returns empty profile if none exists."""
+async def get_brand_profile(request: Request):
+    """Fetch the authenticated user's brand profile."""
+    user_id = get_user_id(request)
     try:
         db = get_supabase()
         res = db.table("brand_profiles").select("*").eq("user_id", user_id).maybe_single().execute()
         if res.data:
             return res.data
-        # Return empty profile shape so frontend can pre-fill blank form
         return {
             "user_id": user_id,
             "niche": "",
@@ -42,12 +36,13 @@ async def get_brand_profile(user_id: str):
 
 
 @router.put("/profile")
-async def save_brand_profile(req: BrandProfileRequest):
-    """Upsert brand profile for a user."""
+async def save_brand_profile(request: Request, req: BrandProfileRequest):
+    """Upsert brand profile for the authenticated user."""
+    user_id = get_user_id(request)
     try:
         db = get_supabase()
         data = {
-            "user_id": req.user_id,
+            "user_id": user_id,
             "niche": req.niche,
             "audience": req.audience,
             "tone": req.tone,
