@@ -14,11 +14,51 @@ Sentinel values in PLAN_FEATURES:
 """
 
 import logging
+import threading
 from datetime import date
 from dateutil.relativedelta import relativedelta
 from core.config import TEST_USER_ID
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Email helpers (fire-and-forget background threads) ───────────────────────
+
+def _fire_welcome_email(db, user_id: str) -> None:
+    """Fetch user email from Supabase Auth and send welcome email in a daemon thread."""
+    def _send():
+        try:
+            user_res = db.auth.admin.get_user_by_id(user_id)
+            if not (user_res and user_res.user and user_res.user.email):
+                return
+            email = user_res.user.email
+            meta  = user_res.user.user_metadata or {}
+            name  = meta.get("full_name") or meta.get("name") or email.split("@")[0]
+            from modules.email.service import welcome_email
+            welcome_email(email, name)
+        except Exception as exc:
+            logger.warning(f"[plans] welcome email failed for {user_id}: {exc}")
+    threading.Thread(target=_send, daemon=True).start()
+
+
+def _fire_limit_email(db, user_id: str, feature: str, plan: dict) -> None:
+    """Fetch user email from Supabase Auth and send limit-reached email in a daemon thread."""
+    plan_snapshot = dict(plan)   # copy so the thread doesn't see later mutations
+    def _send():
+        try:
+            user_res = db.auth.admin.get_user_by_id(user_id)
+            if not (user_res and user_res.user and user_res.user.email):
+                return
+            from modules.email.service import limit_reached_email
+            limit_reached_email(
+                to_email   = user_res.user.email,
+                plan       = plan_snapshot.get("plan_name", "free"),
+                feature    = feature,
+                reset_date = str(plan_snapshot.get("reset_date", "")),
+            )
+        except Exception as exc:
+            logger.warning(f"[plans] limit email failed for {user_id} feature={feature}: {exc}")
+    threading.Thread(target=_send, daemon=True).start()
 
 # ─── Plan feature limits ───────────────────────────────────────────────────────
 # None = blocked (403), -1 = unlimited, positive int = monthly cap
@@ -92,6 +132,7 @@ def get_or_create_plan(db, user_id: str) -> dict:
         }
         try:
             db.table("user_plans").insert(row).execute()
+            _fire_welcome_email(db, user_id)   # new user — send welcome email
         except Exception as exc:
             logger.warning(f"[plans] insert failed for {user_id}: {exc}")
         return row
@@ -170,14 +211,21 @@ def increment_feature(db, user_id: str, feature: str, plan: dict) -> None:
     if not counter_col:
         return
 
-    current = int(plan.get(counter_col, 0))
+    current   = int(plan.get(counter_col, 0))
+    new_value = current + 1
     try:
-        db.table("user_plans").update({
-            counter_col: current + 1,
-        }).eq("user_id", user_id).execute()
-        plan[counter_col] = current + 1
+        db.table("user_plans").update({counter_col: new_value}).eq("user_id", user_id).execute()
+        plan[counter_col] = new_value
     except Exception as exc:
         logger.warning(f"[plans] increment {feature} failed for {user_id}: {exc}")
+        return
+
+    # Fire limit-reached email the moment the counter first hits the monthly cap.
+    # increment_feature is only called when access was "ok" (used < limit), so
+    # new_value == limit means this is the last allowed request for the month.
+    cap = PLAN_FEATURES.get(plan.get("plan_name", "free"), {}).get(feature)
+    if isinstance(cap, int) and cap > 0 and new_value >= cap:
+        _fire_limit_email(db, user_id, feature, plan)
 
 
 # ─── Legacy shim — kept so existing pipeline router still compiles ─────────────

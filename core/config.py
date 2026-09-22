@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o"
     ANTHROPIC_API_KEY: str = ""
     ASSEMBLYAI_API_KEY: str = ""
+    RESEND_API_KEY: str = ""
     STRIPE_SECRET_KEY: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
