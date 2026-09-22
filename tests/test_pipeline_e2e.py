@@ -2,6 +2,7 @@ import asyncio, sys, os, uuid
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.database import get_supabase
+from core.config import TEST_USER_ID
 from modules.transcription.service import transcribe_job
 from modules.emotion_engine.service import analyze_job
 from modules.prediction_engine.service import predict_job
@@ -39,8 +40,8 @@ async def run_test():
     job_id = str(uuid.uuid4())
 
     print("\n[1/6] Creating test job...")
-    db.table("projects").insert({"id": project_id, "title": "E2E Test", "user_id": "00000000-0000-0000-0000-000000000001"}).execute()
-    db.table("jobs").insert({"id": job_id, "project_id": project_id, "user_id": "00000000-0000-0000-0000-000000000001", "status": "pending", "content_type": "script", "raw_script": TEST_SCRIPT, "meta": {}}).execute()
+    db.table("projects").insert({"id": project_id, "title": "E2E Test", "user_id": TEST_USER_ID}).execute()
+    db.table("jobs").insert({"id": job_id, "project_id": project_id, "user_id": TEST_USER_ID, "status": "pending", "content_type": "script", "raw_script": TEST_SCRIPT, "meta": {}}).execute()
     print(f"    ✓ Job created: {job_id}")
 
     print("\n[2/6] Transcribing...")

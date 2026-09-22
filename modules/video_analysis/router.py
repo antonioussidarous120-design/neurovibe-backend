@@ -1,8 +1,9 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 from core.database import get_supabase
-from core.config import settings, TEST_USER_ID
+from core.config import settings
+from core.auth import get_user_id
 from modules.video_analysis.service import analyze_video, SUPPORTED_FORMATS
 import uuid
 import logging
@@ -52,7 +53,7 @@ async def _run_analysis(
 
 
 @router.get("/upload-url")
-async def get_upload_url(filename: str = Query(..., description="Original filename including extension")):
+async def get_upload_url(request: Request, filename: str = Query(..., description="Original filename including extension")):
     """
     Returns a presigned Supabase storage upload URL.
     Frontend uploads directly to Supabase (bypassing Railway size limits),
@@ -66,8 +67,9 @@ async def get_upload_url(filename: str = Query(..., description="Original filena
             detail=f"Unsupported file type '.{ext}'. Supported: {', '.join(sorted(SUPPORTED_FORMATS))}",
         )
 
+    user_id = get_user_id(request)
     file_id = str(uuid.uuid4())
-    file_path = f"{TEST_USER_ID}/video_analysis/{file_id}/{filename}"
+    file_path = f"{user_id}/video_analysis/{file_id}/{filename}"
 
     db = get_supabase()
     try:
@@ -89,6 +91,7 @@ async def get_upload_url(filename: str = Query(..., description="Original filena
 
 @router.post("/upload")
 async def upload_video(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     job_id: Optional[str] = Form(None),
@@ -105,8 +108,9 @@ async def upload_video(
             detail=f"Unsupported file type '.{ext}'. Supported: {', '.join(sorted(SUPPORTED_FORMATS))}",
         )
 
+    user_id = get_user_id(request)
     file_id = str(uuid.uuid4())
-    file_path = f"{TEST_USER_ID}/video_analysis/{file_id}/{filename}"
+    file_path = f"{user_id}/video_analysis/{file_id}/{filename}"
 
     # Read file bytes
     file_bytes = await file.read()
