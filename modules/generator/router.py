@@ -165,7 +165,7 @@ async def score_script_async(script_text: str, user_id: str | None, script_id: s
                 {"role": "system", "content": "You are a brutally honest neuromarketing analyst. Return only valid JSON. Never give round numbers — be precise and script-specific."},
                 {"role": "user", "content": SCORE_PROMPT.format(script=script_text)},
             ],
-            temperature=0.6,
+            temperature=0.2,  # Low temperature for deterministic viral score analysis
             max_tokens=600,
             response_format={"type": "json_object"},
         )

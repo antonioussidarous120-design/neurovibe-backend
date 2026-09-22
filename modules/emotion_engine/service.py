@@ -44,6 +44,25 @@ The DMN activates when arousal falls below threshold (Buckner et al., 2008). Wor
 
 OUTPUT: Valid JSON only. Be precise — small score differences matter. Bias toward accuracy over generosity."""
 
+FRAMEWORK_METADATA = {
+    "model": "NeuroVibe Affective Science Model v1",
+    "dimensions": {
+        "curiosity":     {"weight": 0.28, "reference": "Loewenstein (1994) Information Gap Theory"},
+        "trust":         {"weight": 0.22, "reference": "Cialdini (2001) + mPFC credibility processing"},
+        "warmth":        {"weight": 0.20, "reference": "Rizzolatti & Craighero (2004) Mirror Neuron System"},
+        "excitement":    {"weight": 0.15, "reference": "Amygdala/HPA axis dopamine-norepinephrine co-release"},
+        "boredom_risk":  {"weight": 0.15, "reference": "Buckner et al. (2008) Default Mode Network"},
+    },
+    "drop_threshold": 0.62,
+    "citations": [
+        "Loewenstein, G. (1994). The psychology of curiosity. Psychological Bulletin, 116(1), 75-98.",
+        "Rizzolatti, G. & Craighero, L. (2004). The mirror-neuron system. Annual Review of Neuroscience, 27, 169-192.",
+        "Buckner, R.L. et al. (2008). The brain's default network. Annals of the New York Academy of Sciences.",
+        "Kahneman, D. (2011). Thinking, Fast and Slow. Farrar, Straus and Giroux.",
+        "Nielsen Norman Group. (2011). How long do users stay on web pages?",
+    ],
+}
+
 NEURO_USER_TEMPLATE = """Analyze this content segment and score each dimension 0.0–1.0:
 
 "{text}"
@@ -71,6 +90,8 @@ async def analyze_job(job_id: str, db) -> list:
             "is_drop_moment": scored_seg.is_drop_moment,
             "drop_reason":    scored_seg.drop_reason,
         }).eq("id", seg_data["id"]).execute()
+    # Store framework metadata in job record so frontend can surface scoring provenance
+    db.table("jobs").update({"meta": {"framework": FRAMEWORK_METADATA}}).eq("id", job_id).execute()
     return scored
 
 
@@ -99,6 +120,7 @@ async def _claude_score(text: str) -> EmotionScores:
         response = await _anthropic_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=150,
+            temperature=0,  # Deterministic scoring — identical inputs must produce identical scores
             system=NEURO_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": NEURO_USER_TEMPLATE.format(text=text)}],
         )
