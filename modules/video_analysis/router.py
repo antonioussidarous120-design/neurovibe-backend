@@ -4,6 +4,7 @@ from typing import Optional
 from core.database import get_supabase
 from core.config import settings
 from core.auth import get_user_id
+from core.plans import check_feature_access, increment_feature, PLAN_FEATURES, UPGRADE_TO
 from modules.video_analysis.service import analyze_video, SUPPORTED_FORMATS
 import uuid
 import logging
@@ -68,10 +69,37 @@ async def get_upload_url(request: Request, filename: str = Query(..., descriptio
         )
 
     user_id = get_user_id(request)
+    db = get_supabase()
+
+    status, plan = check_feature_access(db, user_id, "video_analysis")
+    if status == "blocked":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "feature_blocked",
+                "feature": "video_analysis",
+                "plan": plan["plan_name"],
+                "upgrade_to": UPGRADE_TO.get("video_analysis", {}).get(plan["plan_name"], "creator"),
+                "message": "Video Analysis requires the Creator or Pro plan.",
+            },
+        )
+    if status == "limit_reached":
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "limit_reached",
+                "feature": "video_analysis",
+                "plan": plan["plan_name"],
+                "used": plan.get("video_analyses_used", 0),
+                "limit": PLAN_FEATURES.get(plan["plan_name"], {}).get("video_analysis"),
+                "upgrade_to": UPGRADE_TO.get("video_analysis", {}).get(plan["plan_name"], "pro"),
+                "message": f"You've used all {PLAN_FEATURES.get(plan['plan_name'], {}).get('video_analysis')} Video Analysis runs this month.",
+            },
+        )
+
     file_id = str(uuid.uuid4())
     file_path = f"{user_id}/video_analysis/{file_id}/{filename}"
 
-    db = get_supabase()
     try:
         result = db.storage.from_(settings.SUPABASE_BUCKET).create_signed_upload_url(file_path)
         if isinstance(result, dict):
@@ -109,6 +137,34 @@ async def upload_video(
         )
 
     user_id = get_user_id(request)
+    db = get_supabase()
+
+    status, plan = check_feature_access(db, user_id, "video_analysis")
+    if status == "blocked":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "feature_blocked",
+                "feature": "video_analysis",
+                "plan": plan["plan_name"],
+                "upgrade_to": UPGRADE_TO.get("video_analysis", {}).get(plan["plan_name"], "creator"),
+                "message": "Video Analysis requires the Creator or Pro plan.",
+            },
+        )
+    if status == "limit_reached":
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "limit_reached",
+                "feature": "video_analysis",
+                "plan": plan["plan_name"],
+                "used": plan.get("video_analyses_used", 0),
+                "limit": PLAN_FEATURES.get(plan["plan_name"], {}).get("video_analysis"),
+                "upgrade_to": UPGRADE_TO.get("video_analysis", {}).get(plan["plan_name"], "pro"),
+                "message": f"You've used all {PLAN_FEATURES.get(plan['plan_name'], {}).get('video_analysis')} Video Analysis runs this month.",
+            },
+        )
+
     file_id = str(uuid.uuid4())
     file_path = f"{user_id}/video_analysis/{file_id}/{filename}"
 
@@ -117,7 +173,6 @@ async def upload_video(
     logger.info(f"[upload_video] received {len(file_bytes)} bytes for {filename}")
 
     # Upload to Supabase using service role key (bypasses RLS)
-    db = get_supabase()
     try:
         db.storage.from_(settings.SUPABASE_BUCKET).upload(
             file_path,
@@ -139,6 +194,8 @@ async def upload_video(
 
     background_tasks.add_task(_run_analysis, video_job_id, file_path, filename, job_id)
     logger.info(f"[upload_video] analysis queued video_job_id={video_job_id}")
+
+    increment_feature(db, user_id, "video_analysis", plan)
 
     return {"job_id": video_job_id, "status": "processing", "file_path": file_path}
 

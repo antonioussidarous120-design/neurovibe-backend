@@ -1,22 +1,19 @@
 import asyncio
 import json
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from openai import AsyncOpenAI
 import anthropic
-from supabase import create_client
 from core.config import settings
+from core.database import get_supabase
+from core.auth import get_user_id
+from core.plans import check_feature_access, increment_feature, PLAN_FEATURES, FEATURE_COUNTER, UPGRADE_TO
 
 router = APIRouter()
 # Claude for script generation (better instruction-following, sharper creative writing)
 claude_client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 # OpenAI kept for scoring (fast, cheap, structured JSON)
 openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-
-
-def get_supabase():
-    key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_KEY or settings.SUPABASE_ANON_KEY
-    return create_client(settings.SUPABASE_URL, key)
 
 
 class ScriptRequest(BaseModel):
@@ -199,28 +196,59 @@ async def score_script_async(script_text: str, user_id: str | None, script_id: s
 
 
 @router.post("/script")
-async def generate_script(req: ScriptRequest):
-    # Fetch brand profile if user_id provided
+async def generate_script(request: Request, req: ScriptRequest):
+    user_id = get_user_id(request)
+    db = get_supabase()
+
+    # Determine feature based on platform
+    feature = "ads" if req.platform == "Facebook Ad" else "script_generator"
+
+    # Enforce plan limits
+    status, plan = check_feature_access(db, user_id, feature)
+    if status == "blocked":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "feature_blocked",
+                "feature": feature,
+                "plan": plan["plan_name"],
+                "upgrade_to": UPGRADE_TO.get(feature, {}).get(plan["plan_name"], "pro"),
+                "message": "Ads generation requires the Pro plan.",
+            },
+        )
+    if status == "limit_reached":
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "limit_reached",
+                "feature": feature,
+                "plan": plan["plan_name"],
+                "used": plan.get(FEATURE_COUNTER.get(feature, "") or "", 0),
+                "limit": PLAN_FEATURES.get(plan["plan_name"], {}).get(feature),
+                "upgrade_to": UPGRADE_TO.get(feature, {}).get(plan["plan_name"], "pro"),
+                "message": f"You've reached your monthly {feature.replace('_', ' ').title()} limit.",
+            },
+        )
+
+    # Fetch brand profile using the real user_id
     brand_block = ""
-    if req.user_id:
-        try:
-            db = get_supabase()
-            res = db.table("brand_profiles").select("*").eq("user_id", req.user_id).maybe_single().execute()
-            if res.data:
-                bp = res.data
-                parts = []
-                if bp.get("niche"):
-                    parts.append(f"- Niche: {bp['niche']}")
-                if bp.get("audience"):
-                    parts.append(f"- Target audience: {bp['audience']}")
-                if bp.get("tone"):
-                    parts.append(f"- Brand tone: {bp['tone']}")
-                if bp.get("voice_notes"):
-                    parts.append(f"- Voice rules: {bp['voice_notes']}")
-                if parts:
-                    brand_block = "\n\nBRAND CONTEXT (apply to every line — makes this feel like THEIR brand, not a template):\n" + "\n".join(parts) + "\n"
-        except Exception:
-            pass  # Non-fatal — generate without brand context
+    try:
+        res = db.table("brand_profiles").select("*").eq("user_id", user_id).maybe_single().execute()
+        if res.data:
+            bp = res.data
+            parts = []
+            if bp.get("niche"):
+                parts.append(f"- Niche: {bp['niche']}")
+            if bp.get("audience"):
+                parts.append(f"- Target audience: {bp['audience']}")
+            if bp.get("tone"):
+                parts.append(f"- Brand tone: {bp['tone']}")
+            if bp.get("voice_notes"):
+                parts.append(f"- Voice rules: {bp['voice_notes']}")
+            if parts:
+                brand_block = "\n\nBRAND CONTEXT (apply to every line — makes this feel like THEIR brand, not a template):\n" + "\n".join(parts) + "\n"
+    except Exception:
+        pass  # Non-fatal — generate without brand context
 
     emotion_context = {
         "Excitement": "excitement/hype — energy, momentum, forward motion, big promises, celebratory tone",
@@ -292,8 +320,11 @@ Apply ALL 7 neuroscience triggers. Be SPECIFIC and UNEXPECTED. Every line must e
     )
     script_text = r.content[0].text.strip()
 
+    # Increment usage counter after successful generation
+    increment_feature(db, user_id, feature, plan)
+
     # Score concurrently — don't wait for it to block the response
-    viral_score = await score_script_async(script_text, req.user_id, None)
+    viral_score = await score_script_async(script_text, user_id, None)
 
     return {
         "script": script_text,

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from core.database import get_supabase
 from core.auth import get_user_id
-from core.plans import check_and_increment, PLAN_LIMITS
+from core.plans import check_feature_access, increment_feature, PLAN_FEATURES, UPGRADE_TO
 from modules.transcription.service import transcribe_job
 from modules.emotion_engine.service import analyze_job
 from modules.prediction_engine.service import predict_job
@@ -23,27 +23,23 @@ async def run_pipeline(job_id: str, background_tasks: BackgroundTasks, request: 
     if not res.data:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
 
-    # Enforce plan limits — increments counter on success
-    allowed, plan = check_and_increment(db, user_id)
-    if not allowed:
-        limit = PLAN_LIMITS.get(plan["plan_name"])
+    # Enforce plan limits for script_analyzer feature
+    status, plan = check_feature_access(db, user_id, "script_analyzer")
+    if status == "limit_reached":
         raise HTTPException(
             status_code=429,
             detail={
-                "error": "usage_limit_reached",
-                "message": (
-                    f"You've used all {limit} analyses this month "
-                    f"on the {plan['plan_name'].title()} plan."
-                ),
+                "error": "limit_reached",
+                "feature": "script_analyzer",
                 "plan": plan["plan_name"],
-                "used": plan["analyses_used_this_month"],
-                "limit": limit,
-                "upgrade_message": (
-                    "Upgrade to Creator (100/mo) or Pro (unlimited) to keep going."
-                ),
+                "used": plan.get("script_analyses_used", 0),
+                "limit": PLAN_FEATURES.get(plan["plan_name"], {}).get("script_analyzer"),
+                "upgrade_to": UPGRADE_TO.get("script_analyzer", {}).get(plan["plan_name"], "pro"),
+                "message": f"You've used all {PLAN_FEATURES.get(plan['plan_name'], {}).get('script_analyzer')} Script Analyzer runs this month on the {plan['plan_name'].title()} plan.",
             },
         )
 
+    increment_feature(db, user_id, "script_analyzer", plan)
     background_tasks.add_task(_run, job_id)
     return {"job_id": job_id, "message": "Pipeline started"}
 
