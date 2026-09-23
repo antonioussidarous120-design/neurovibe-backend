@@ -1,6 +1,7 @@
 anthropic>=0.40.0
 stripe>=5.0.0
 resend>=2.0.0
+email-validator>=2.0.0
 annotated-doc==0.0.4
 google-cloud-videointelligence
 google-cloud-storage
