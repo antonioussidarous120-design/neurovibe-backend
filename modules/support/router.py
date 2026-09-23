@@ -13,7 +13,7 @@ class SupportRequest(BaseModel):
     message: str
 
 
-@router.post("/")
+@router.post("")
 async def submit_support(req: SupportRequest):
     """Forward support message to admin, send confirmation to user."""
     logger.info(f"[support] message from {req.email}")

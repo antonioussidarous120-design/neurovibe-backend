@@ -12,7 +12,7 @@ class WaitlistRequest(BaseModel):
     email: EmailStr
 
 
-@router.post("/")
+@router.post("")
 async def join_waitlist(req: WaitlistRequest):
     """Save email to waitlist table, notify admin, confirm to user."""
     db = get_supabase()
