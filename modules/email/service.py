@@ -6,6 +6,7 @@ Templates use inline CSS for email-client compatibility.
 """
 
 import logging
+import threading
 import resend
 from datetime import date
 from core.config import settings
@@ -345,3 +346,126 @@ def limit_reached_email(to_email: str, plan: str, feature: str, reset_date: str)
         logger.info(f"[email] limit_reached sent to {to_email} feature={feature} plan={plan}")
     except Exception as exc:
         logger.warning(f"[email] limit_reached send failed for {to_email}: {exc}")
+
+
+# ─── notify_admin ─────────────────────────────────────────────────────────────
+
+def notify_admin(subject: str, body: str) -> None:
+    """Send a plain-text admin notification to support.neurovibe@gmail.com.
+    Runs in a daemon thread — never blocks the caller, never raises."""
+    def _send():
+        try:
+            if not settings.RESEND_API_KEY:
+                logger.warning("[email] RESEND_API_KEY not set — skipping admin notify")
+                return
+            resend.api_key = settings.RESEND_API_KEY
+            resend.Emails.send({
+                "from": SENDER,
+                "to": [SUPPORT_EMAIL],
+                "subject": subject,
+                "text": body,
+            })
+            logger.info(f"[email] admin notify sent: {subject}")
+        except Exception as exc:
+            logger.warning(f"[email] admin notify failed — {subject}: {exc}")
+    threading.Thread(target=_send, daemon=True).start()
+
+
+# ─── waitlist_confirmation_email ──────────────────────────────────────────────
+
+def waitlist_confirmation_email(to_email: str) -> None:
+    """Send confirmation to a user who joined the waitlist."""
+    if not settings.RESEND_API_KEY:
+        return
+
+    resend.api_key = settings.RESEND_API_KEY
+
+    content = f"""
+      <h1 style="margin:0 0 10px;font-size:26px;font-weight:900;color:#f4f4f5;
+                 font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+                 letter-spacing:-0.02em;">
+        You're on the list. ⚡
+      </h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#a1a1aa;line-height:1.7;
+                font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+        You're on the waitlist for <strong style="color:#f4f4f5;">Social Intelligence</strong> —
+        NeuroVibe's next feature. You'll be the first to know when it launches.
+      </p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="background:rgba(245,158,11,0.04);border:1px solid rgba(245,158,11,0.12);
+                    border-radius:12px;padding:18px 20px;">
+        <tr>
+          <td style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+                     font-size:13px;color:#a1a1aa;line-height:1.6;">
+            While you wait, explore the rest of NeuroVibe — analyze scripts,
+            generate viral content, and test your hooks at
+            <a href="{SITE_URL}" style="color:#F59E0B;text-decoration:none;">{SITE_URL}</a>.
+          </td>
+        </tr>
+      </table>
+      <p style="margin:28px 0 0;font-size:13px;color:#52525b;
+                font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+        — {BRAND_NAME}
+      </p>
+    """
+
+    try:
+        resend.Emails.send({
+            "from": SENDER,
+            "to": [to_email],
+            "subject": "You're on the waitlist ⚡",
+            "html": _html_shell(content),
+        })
+        logger.info(f"[email] waitlist confirmation sent to {to_email}")
+    except Exception as exc:
+        logger.warning(f"[email] waitlist confirmation failed for {to_email}: {exc}")
+
+
+# ─── support_confirmation_email ───────────────────────────────────────────────
+
+def support_confirmation_email(to_email: str, name: str) -> None:
+    """Send a confirmation to a user who submitted a support request."""
+    if not settings.RESEND_API_KEY:
+        return
+
+    resend.api_key = settings.RESEND_API_KEY
+    first = name.split()[0] if name else "there"
+
+    content = f"""
+      <h1 style="margin:0 0 10px;font-size:26px;font-weight:900;color:#f4f4f5;
+                 font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+                 letter-spacing:-0.02em;">
+        Got your message.
+      </h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#a1a1aa;line-height:1.7;
+                font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+        Hey {first} — we've received your message and we'll get back to you
+        within <strong style="color:#f4f4f5;">24 hours</strong>.
+      </p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="background:rgba(245,158,11,0.04);border:1px solid rgba(245,158,11,0.12);
+                    border-radius:12px;padding:18px 20px;">
+        <tr>
+          <td style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+                     font-size:13px;color:#a1a1aa;line-height:1.6;">
+            If your issue is urgent, reply directly to this email or reach us at
+            <a href="mailto:{SUPPORT_EMAIL}" style="color:#F59E0B;text-decoration:none;">{SUPPORT_EMAIL}</a>.
+          </td>
+        </tr>
+      </table>
+      <p style="margin:28px 0 0;font-size:13px;color:#52525b;
+                font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+        — {BRAND_NAME}
+      </p>
+    """
+
+    try:
+        resend.Emails.send({
+            "from": SENDER,
+            "to": [to_email],
+            "subject": f"We got your message, {first}",
+            "html": _html_shell(content),
+        })
+        logger.info(f"[email] support confirmation sent to {to_email}")
+    except Exception as exc:
+        logger.warning(f"[email] support confirmation failed for {to_email}: {exc}")

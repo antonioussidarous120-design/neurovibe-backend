@@ -179,6 +179,11 @@ async def stripe_webhook(request: Request):
             update["stripe_customer_id"] = customer_id
         db.table("user_plans").update(update).eq("user_id", user_id).execute()
         logger.info(f"[billing/webhook] checkout.completed → user={user_id} plan={plan_name}")
+        from modules.email.service import notify_admin
+        notify_admin(
+            subject=f"💰 New Paying Customer — {plan_name}",
+            body=f"Someone just upgraded to {plan_name}. Stripe customer: {customer_id}. User ID: {user_id}.",
+        )
 
     # ── customer.subscription.updated ─────────────────────────────────────────
     elif etype == "customer.subscription.updated":
@@ -199,6 +204,11 @@ async def stripe_webhook(request: Request):
         if customer_id:
             db.table("user_plans").update({"plan_name": "free"}).eq("stripe_customer_id", customer_id).execute()
             logger.info(f"[billing/webhook] subscription.deleted customer={customer_id} → free")
+            from modules.email.service import notify_admin
+            notify_admin(
+                subject="❌ Subscription Cancelled",
+                body=f"A user cancelled and was downgraded to free. Stripe customer: {customer_id}.",
+            )
 
     else:
         logger.debug(f"[billing/webhook] unhandled event type: {etype}")

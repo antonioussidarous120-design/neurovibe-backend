@@ -32,6 +32,8 @@ from modules.video_analysis.router import router as video_router
 from modules.generator.router import router as generator_router
 from modules.brand.router import router as brand_router
 from modules.billing.router import router as billing_router
+from modules.waitlist.router import router as waitlist_router
+from modules.support.router import router as support_router
 
 app.include_router(upload_router,        prefix="/api/upload",     tags=["Upload"])
 app.include_router(transcription_router, prefix="/api/transcribe", tags=["Transcription"])
@@ -48,6 +50,8 @@ app.include_router(video_router,         prefix="/api/video",      tags=["Video 
 app.include_router(generator_router,     prefix="/api/generator",  tags=["Generator"])
 app.include_router(brand_router,         prefix="/api/brand",      tags=["Brand"])
 app.include_router(billing_router,       prefix="/api/billing",    tags=["Billing"])
+app.include_router(waitlist_router,      prefix="/api/waitlist",   tags=["Waitlist"])
+app.include_router(support_router,       prefix="/api/support",    tags=["Support"])
 
 @app.get("/health")
 def health():

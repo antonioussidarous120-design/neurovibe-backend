@@ -133,6 +133,11 @@ def get_or_create_plan(db, user_id: str) -> dict:
         try:
             db.table("user_plans").insert(row).execute()
             _fire_welcome_email(db, user_id)   # new user — send welcome email
+            from modules.email.service import notify_admin
+            notify_admin(
+                subject="🆕 New NeuroVibe User",
+                body=f"A new user just signed up. User ID: {user_id}. Check Supabase for their email.",
+            )
         except Exception as exc:
             logger.warning(f"[plans] insert failed for {user_id}: {exc}")
         return row
@@ -226,6 +231,11 @@ def increment_feature(db, user_id: str, feature: str, plan: dict) -> None:
     cap = PLAN_FEATURES.get(plan.get("plan_name", "free"), {}).get(feature)
     if isinstance(cap, int) and cap > 0 and new_value >= cap:
         _fire_limit_email(db, user_id, feature, plan)
+        from modules.email.service import notify_admin
+        notify_admin(
+            subject=f"⚠️ User Hit Plan Limit — {feature}",
+            body=f"A {plan.get('plan_name', 'free')} user hit their {feature} limit. User ID: {user_id}.",
+        )
 
 
 # ─── Legacy shim — kept so existing pipeline router still compiles ─────────────
