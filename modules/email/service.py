@@ -12,7 +12,7 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-SENDER      = "onboarding@resend.dev"
+SENDER      = "noreply@getneruovibe.com"
 BRAND_NAME  = "NeuroVibe"
 SITE_URL    = "https://getneruovibe.com"
 PRICING_URL = "https://getneruovibe.com/pricing"
